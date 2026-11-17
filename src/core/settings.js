@@ -88,7 +88,7 @@ const DEFAULT_ROUTING = Object.freeze({
 });
 
 const ENUMS = {
-  language: ['fa', 'en', 'ru'],
+  language: ['fa', 'en', 'ru', 'zh'],
   theme: ['dark', 'light', 'midnight', 'graphite', 'system'],
   accent: ['green', 'blue', 'purple', 'orange', 'pink'],
   density: ['comfortable', 'compact'],

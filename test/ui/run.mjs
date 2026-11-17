@@ -265,11 +265,40 @@ try {
 
   await check('language and theme switch redraw cleanly', async () => {
     const before = page.errors.length;
-    for (const p of [{ language: 'en' }, { language: 'ru' }, { theme: 'light' }, { theme: 'midnight' }, { language: 'fa', theme: 'dark' }]) await setSettings(p);
+    for (const p of [{ language: 'en' }, { language: 'ru' }, { language: 'zh' }, { theme: 'light' }, { theme: 'midnight' }, { language: 'fa', theme: 'dark' }]) await setSettings(p);
     const title = await ev(`document.querySelector('aside .nav-btn .nav-label').textContent`);
     assert(title === 'سرورها', `menu text after switching back: ${title}`);
     assert(page.errors.length === before, `errors: ${page.errors.slice(before).join(' | ')}`);
   });
+
+  await check('every language on every page: no untranslated keys, no clipped buttons, the right font', async () => {
+    const before = page.errors.length;
+    const bad = [];
+    for (const lang of ['en', 'ru', 'zh', 'fa']) {
+      await setSettings({ language: lang }); await wait(300);
+      const n = await ev(`document.querySelectorAll('aside .nav-btn:not(.nav-help)').length`);
+      for (let p = 0; p < n; p++) {
+        await ev(`[...document.querySelectorAll('aside .nav-btn:not(.nav-help)')][${p}].click()`); await wait(450);
+        const r = await ev(`(() => {
+          const text = document.body.innerText;
+          // t() shows the key itself when a translation is missing: snake_case words like upd_help
+          const keys = [...new Set(text.match(/\\b[a-z]{2,}_[a-zA-Z_]{2,}\\b/g) || [])].filter((k) => !/^(geoip|geosite|full|keyword|regexp|domain|xtls|ip_|http_)/.test(k));
+          const clipped = [...document.querySelectorAll('main button, aside button, main .seg-btn, main .tab')]
+            .filter((b) => b.offsetParent && b.scrollWidth > b.clientWidth + 2 && getComputedStyle(b).textOverflow !== 'ellipsis' && ![...b.querySelectorAll('*')].some((c) => getComputedStyle(c).textOverflow === 'ellipsis'))
+            .map((b) => b.textContent.trim().slice(0, 30));
+          return { keys, clipped, lang: document.documentElement.lang, font: getComputedStyle(document.body).fontFamily, cjk: /[\\u4e00-\\u9fff]/.test(text) };
+        })()`);
+        const where = `${lang} page ${p + 1}`;
+        if (r.lang !== lang) bad.push(`${where}: html lang is ${r.lang}`);
+        if (r.keys.length) bad.push(`${where}: untranslated ${r.keys.slice(0, 4).join(', ')}`);
+        if (r.clipped.length) bad.push(`${where}: clipped ${r.clipped.slice(0, 3).join(' | ')}`);
+        if (lang === 'zh' && (!r.cjk || !/YaHei/.test(r.font))) bad.push(`${where}: Chinese text ${r.cjk} font ${r.font}`);
+      }
+    }
+    await setSettings({ language: 'fa' });
+    const errs = page.errors.slice(before);
+    assert(!bad.length && !errs.length, [...bad.slice(0, 8), ...errs.slice(0, 2)].join(' | '));
+  }, 180000);
 
   // ------------------------------------------------------------ every control in the forms
   // Real clicks on every dropdown, switch and choice button of a dialog: the choice must show at

@@ -48,7 +48,7 @@ function statusOf(item, id) {
         onClick: async (e) => { e.currentTarget.disabled = true; if (await run(() => api.cancelUpdate(id))) toast(t('upd_cancelled'), 'info'); },
       }, icon('close', 13)) : null);
   }
-  if (item.error) return h('span', { class: 'upd-err', title: item.error }, icon('alert', 14), t(item.error === 'CHECKSUM_MISMATCH' ? 'upd_badHash' : 'upd_error'));
+  if (item.error) return h('span', { class: 'upd-err', title: item.error }, icon('alert', 14), t(item.error === 'CHECKSUM_MISMATCH' ? 'upd_badHash' : /^UPDATE_(START_FAILED|UAC_DECLINED)/.test(item.error) ? 'upd_installFailed' : 'upd_error'));
   if (item.available) return h('span', { class: 'pill accent' }, t('upd_available'));
   if (item.latest) return h('span', { class: 'upd-ok' }, icon('check', 14), t('upd_upToDate'));
   return h('span', { class: 'dim' }, t('upd_notChecked'));

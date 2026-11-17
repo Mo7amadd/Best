@@ -251,7 +251,7 @@ export function renderSettings() {
   const v = ui.versions || {};
 
   const appearance = card(t('sec_appearance'), 'eye',
-    field(t('language'), segmented([{ value: 'fa', label: 'فارسی' }, { value: 'en', label: 'English' }, { value: 'ru', label: 'Русский' }], st.language, (x) => set({ language: x }), { label: t('language') })),
+    field(t('language'), segmented([{ value: 'fa', label: 'فارسی' }, { value: 'en', label: 'English' }, { value: 'ru', label: 'Русский' }, { value: 'zh', label: '中文' }], st.language, (x) => set({ language: x }), { label: t('language') })),
     h('div', { class: 'field' }, h('span', { class: 'field-label' }, t('theme')),
       h('div', { class: 'themes', role: 'group', 'aria-label': t('theme') }, THEMES.map((th) => h('button', {
         type: 'button', class: 'theme-opt', 'aria-pressed': String(st.theme === th.id), onClick: () => set({ theme: th.id }),

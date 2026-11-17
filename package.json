@@ -1,7 +1,7 @@
 {
   "name": "best",
   "productName": "Best",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Best — desktop proxy client (Xray + sing-box)",
   "main": "electron/main.js",
   "private": true,

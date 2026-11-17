@@ -20,6 +20,12 @@ const STRINGS = {
     routing: 'Маршрутизация', global: 'Всё через прокси', bypassLocal: 'Моя страна напрямую', direct: 'Всё напрямую',
     servers: 'Серверы', updateSubs: 'Обновить подписки', open: 'Открыть Best', quit: 'Выход',
   },
+  zh: {
+    connected: '已连接', disconnected: '未连接', proxyOn: '开启系统代理', proxyOff: '关闭系统代理', connect: '连接', disconnect: '断开连接',
+    systemProxy: '系统代理', off: '关闭', on: '开启', keep: '不更改',
+    routing: '路由', global: '全局', bypassLocal: '本国直连', direct: '直连',
+    servers: '服务器', updateSubs: '更新订阅', open: '打开 Best', quit: '退出',
+  },
 };
 
 module.exports = (lang) => STRINGS[lang] || STRINGS.en;

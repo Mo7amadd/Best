@@ -99,7 +99,7 @@ const pac = new PacServer();
 /** "Subscription 3" / "اشتراک ۳": first free number. */
 function nextSubName(taken = subs) {
   const fa = settings.language === 'fa';
-  const word = fa ? 'اشتراک' : settings.language === 'ru' ? 'Подписка' : 'Subscription';
+  const word = fa ? 'اشتراک' : settings.language === 'ru' ? 'Подписка' : settings.language === 'zh' ? '订阅' : 'Subscription';
   const digits = (n) => (fa ? String(n).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]) : String(n));
   for (let n = 1; n < 1000; n++) {
     const name = `${word} ${digits(n)}`;
@@ -1175,6 +1175,8 @@ function createMainWindow(show) {
   });
   mainWin.loadURL(`${APP_ORIGIN}/index.html`);
   mainWin.webContents.on('did-finish-load', () => { try { mainWin.webContents.setZoomFactor(settings.uiZoom || 1); } catch { /* closed */ } });
+  // An update through the updater task that did not arrive: say so once (the old version is running).
+  mainWin.webContents.once('did-finish-load', () => { const v = appUpd.failedTaskUpdate(); if (v) setTimeout(() => toast('error', 'UPDATE_TASK_FAILED', v), 1500); });
   mainWin.once('ready-to-show', () => { if (show) mainWin.show(); });
   mainWin.on('close', (e) => {
     if (!quitting && settings.closeToTray) { e.preventDefault(); mainWin.hide(); }

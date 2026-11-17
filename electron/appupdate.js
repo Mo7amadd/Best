@@ -10,7 +10,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
-const { app } = require('electron');
+const { app, shell } = require('electron');
 
 const REPO = (() => { try { return String(require('../package.json').best.updateRepo || ''); } catch { return ''; } })();
 const REPO_OK = /^[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}$/.test(REPO);
@@ -63,7 +63,13 @@ async function applyApp(updater, info, portable, onProgress, signal = null) {
   if (again !== info.digest) throw new Error('CHECKSUM_MISMATCH');
 
   if (!portable) {
-    await launchIndependent(`"${file}"`);
+    // 1) The updater task set up by the installer: no administrator prompt (see build/updater).
+    if (await viaUpdaterTask(file, info)) return true;
+    // 2) Otherwise the installer itself, which needs administrator rights (Program Files). WMI cannot
+    // show the UAC prompt, so it refused to start it whenever Best ran as a standard user; Windows'
+    // own ShellExecute shows the prompt, and the installer it starts is not tied to Best.
+    const err = await shell.openPath(file);
+    if (err) throw new Error(/cancel/i.test(err) ? 'UPDATE_UAC_DECLINED' : `UPDATE_START_FAILED: ${err}`);
     return true;
   }
   const out = path.join(dir, 'x');
@@ -99,6 +105,54 @@ async function applyApp(updater, info, portable, onProgress, signal = null) {
   return true;
 }
 
+const SCHTASKS = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'schtasks.exe');
+const TASK = '\\Best\\Updater';
+const run = (exe, args) => new Promise((resolve) => execFile(exe, args, { windowsHide: true, timeout: 20000 }, (e) => resolve(!e)));
+
+/** Where Best notes the version an update should bring (checked on the next start). */
+function pendingFile() { return path.join(app.getPath('userData'), 'update-pending.json'); }
+
+/**
+ * Hand the verified installer to the "\Best\Updater" task (runs as SYSTEM, installs without the
+ * administrator prompt). The task trusts nothing it gets from here: it takes GitHub's checksum and
+ * only installs a newer official release. A small script, running as this user, waits for it and
+ * opens Best again. False when the task is not there or cannot be started.
+ */
+async function viaUpdaterTask(file, info) {
+  if (!(await run(SCHTASKS, ['/Query', '/TN', TASK]))) return false;
+  const incoming = path.join(process.env.ProgramData || 'C:\\ProgramData', 'Best', 'incoming');
+  try { fs.copyFileSync(file, path.join(incoming, info.asset.name)); } catch { return false; }
+  if (!(await run(SCHTASKS, ['/Run', '/TN', TASK]))) return false;
+  try { fs.writeFileSync(pendingFile(), JSON.stringify({ version: info.latest, at: Date.now() })); } catch { /* only for the message */ }
+  const q = (s) => `'${String(s).replace(/['‘’‚‛]/g, '$&$&')}'`;
+  const script = [
+    "$ErrorActionPreference = 'SilentlyContinue'",
+    '$t0 = Get-Date; $seen = $false',
+    // Wait for the task to start and then to finish (at most 45 minutes), then open Best again.
+    'while (((Get-Date) - $t0).TotalMinutes -lt 45) {',
+    "  $s = (Get-ScheduledTask -TaskPath '\\Best\\' -TaskName 'Updater').State",
+    "  if ($s -eq 'Running') { $seen = $true } elseif ($seen -or ((Get-Date) - $t0).TotalSeconds -gt 30) { break }",
+    '  Start-Sleep -Seconds 2',
+    '}',
+    'Start-Sleep -Seconds 1',
+    `Start-Process -FilePath ${q(process.execPath)}`,
+    `Remove-Item -LiteralPath $PSCommandPath -Force`,
+  ].join('\r\n');
+  const f = path.join(os.tmpdir(), `best-restart-${process.pid}.ps1`);
+  fs.writeFileSync(f, `﻿${script}`, 'utf8');
+  await launchIndependent(`"${PS}" -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "${f}"`);
+  return true;
+}
+
+/** On start: an update through the task that did not arrive → its target version (else ''). */
+function failedTaskUpdate() {
+  try {
+    const p = JSON.parse(fs.readFileSync(pendingFile(), 'utf8'));
+    fs.rmSync(pendingFile(), { force: true });
+    return p && /^\d+\.\d+\.\d+$/.test(p.version) && newer(p.version, app.getVersion()) ? p.version : '';
+  } catch { return ''; }
+}
+
 /**
  * Start a program that must outlive Best (the installer, the file-swap script). A normal child is
  * ended together with Best when it quits, so it is created by Windows (WMI) instead.
@@ -110,4 +164,4 @@ function launchIndependent(commandLine) {
     (e) => (e ? reject(new Error('UPDATE_START_FAILED')) : resolve())));
 }
 
-module.exports = { checkApp, applyApp, newer, REPO, REPO_OK };
+module.exports = { checkApp, applyApp, newer, failedTaskUpdate, REPO, REPO_OK };

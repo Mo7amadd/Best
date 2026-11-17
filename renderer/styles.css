@@ -67,6 +67,8 @@ body {
   overflow: hidden; -webkit-font-smoothing: antialiased;
 }
 html[lang="fa"] body { font-family: 'Twemoji Country Flags', Vazirmatn, Inter, 'Segoe UI', system-ui, sans-serif; }
+/* Chinese: the Windows UI font for Chinese (Latin letters and digits still from Inter). */
+html[lang="zh"] body { font-family: 'Twemoji Country Flags', Inter, 'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Noto Sans SC', 'Segoe UI', system-ui, sans-serif; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .5; }

@@ -134,7 +134,7 @@ export function serversInGroup(group = ui.group) {
 export function showError(e) {
   const msg = String((e && e.message) || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
   const [code, ...rest] = msg.split(':');
-  const known = ['PORT_BUSY', 'CORE_FAILED', 'TUN_FAILED', 'NO_SERVER', 'INVALID_URL', 'INVALID_BACKUP', 'SS_BAD_KEY'];
+  const known = ['PORT_BUSY', 'CORE_FAILED', 'TUN_FAILED', 'NO_SERVER', 'INVALID_URL', 'INVALID_BACKUP', 'SS_BAD_KEY', 'UPDATE_START_FAILED', 'UPDATE_UAC_DECLINED', 'CHECKSUM_MISMATCH'];
   toast(known.includes(code) ? t(code, { d: rest.join(':').trim() }) : t('error', { d: msg }), 'error', 6000);
 }
 
