@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld('best', {
   openSubLink: invoke('sub:open'),
   relaunchAdmin: invoke('sys:relaunchAdmin'),
   openDataFolder: invoke('sys:openDataFolder'),
+  openProject: invoke('sys:openProject'),
   copy: invoke('sys:copy'),
   quit: invoke('sys:quit'),
   showMain: invoke('sys:showMain'),

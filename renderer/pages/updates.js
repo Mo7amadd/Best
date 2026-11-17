@@ -87,20 +87,55 @@ function row(r) {
       }) : null));
 }
 
+/** A newer Best is waiting (going back from a test version is the user's own choice, not an update). */
+function appNewer() {
+  const a = S.appUpdate;
+  return Boolean(a && a.configured && a.available && !a.back);
+}
+
+/** How many updates are waiting: shown on the menu. */
+export function updateCount() {
+  return availableUpdates().length + (appNewer() ? 1 : 0);
+}
+
+function bannerItems() {
+  const list = availableUpdates().map((r) => ({ key: r.id, name: r.name, version: S.updates.items[r.id].latest }));
+  if (appNewer()) list.unshift({ key: 'app', name: 'Best', version: S.appUpdate.latest });
+  return list;
+}
+
+// Closed with ×: those versions never show the bar again (also after a restart); only a newer
+// version brings it back once. The number on the menu stays.
+const CLOSED = 'best.updatesBannerClosed';
+function closedVersions() {
+  try { const v = JSON.parse(localStorage.getItem(CLOSED) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+
 export function updatesBanner() {
-  const list = availableUpdates();
-  if (!list.length || ui.updatesDismissed) return null;
-  return h('div', { class: 'upd-banner', role: 'status' },
+  if (ui.page === 'updates') return null;
+  const list = bannerItems();
+  const closed = new Set([...closedVersions(), ...String(ui.updatesBannerClosed || '').split(',')]);
+  if (!list.length || list.every((x) => closed.has(`${x.key}@${x.version}`))) return null;
+  const onlyData = !list.some((x) => x.key === 'app');
+  return h('div', { class: 'upd-banner', role: 'status', 'data-key': 'upd-banner' },
     icon('download', 18),
-    h('span', { class: 'grow' }, h('b', null, t('upd_bannerTitle')), ' ', list.map((r) => `${r.name} ${S.updates.items[r.id].latest}`).join(' · ')),
-    button(t('upd_updateAll'), { size: 'sm', variant: 'primary', onClick: applyAll }),
-    button(t('upd_view'), { size: 'sm', onClick: () => go('updates') }),
-    h('button', { type: 'button', class: 'icon-btn', 'aria-label': t('close'), onClick: () => { ui.updatesDismissed = true; render(); } }, icon('close', 16)));
+    h('span', { class: 'grow' }, h('b', null, t('upd_bannerTitle')), ' ', ltr(list.map((x) => `${x.name} ${x.version}`).join(' · '))),
+    onlyData ? button(t('upd_updateAll'), { size: 'sm', variant: 'primary', onClick: applyAll }) : null,
+    button(t('upd_view'), { size: 'sm', variant: onlyData ? undefined : 'primary', onClick: () => go('updates') }),
+    h('button', {
+      type: 'button', class: 'icon-btn upd-banner-close', title: t('close'), 'aria-label': t('close'),
+      onClick: () => {
+        try { localStorage.setItem(CLOSED, JSON.stringify(list.map((x) => `${x.key}@${x.version}`))); } catch { /* only for this session */ }
+        ui.updatesBannerClosed = list.map((x) => `${x.key}@${x.version}`).join(',');
+        render();
+      },
+    }, icon('close', 16)));
 }
 
 function appStatus() {
   const a = S.appUpdate || {};
   if (!a.configured) return h('span', { class: 'chip', title: t('upd_appNoRepo_help') }, t('upd_appNoRepo'));
+  if (a.back && a.available && !a.busy && !a.error) return h('span', { class: 'pill accent' }, t('upd_backAvailable'));
   return statusOf({ ...a, optional: false, installed: true }, 'app');
 }
 
@@ -125,14 +160,26 @@ export function renderUpdates() {
       h('div', { class: 'upd-row upd-app' },
         h('div', { class: 'upd-name' }, h('b', null, 'Best'), h('span', { class: 'dim' }, t('upd_app_d'))),
         h('div', { class: 'upd-ver' }, h('span', { class: 'dim' }, t('upd_current')), h('b', null, ltr(S.version, 'mono'))),
-        h('div', { class: 'upd-ver' }, h('span', { class: 'dim' }, t('upd_latest')), h('b', null, ltr((S.appUpdate && S.appUpdate.latest) || '—', 'mono'))),
+        h('div', { class: 'upd-ver' }, h('span', { class: 'dim' }, t('upd_latest')), h('b', null, ltr((S.appUpdate && S.appUpdate.latest) || '—', 'mono')), /-/.test((S.appUpdate && S.appUpdate.latest) || '') ? h('span', { class: 'pill soft' }, t('upd_betaBadge')) : null),
         h('div', { class: 'upd-status' }, appStatus()),
-        h('div', { class: 'upd-actions' }, S.appUpdate && S.appUpdate.available
+        h('div', { class: 'upd-actions' }, S.appUpdate && S.appUpdate.available && S.appUpdate.back
+          ? button(t('upd_goBack'), {
+            size: 'sm', variant: 'primary', icon: 'download', disabled: S.appUpdate.busy,
+            onClick: async () => {
+              if (await confirmDialog({ title: t('upd_goBack'), message: t('upd_goBack_confirm', { from: S.version, to: S.appUpdate.latest }), confirmLabel: t('upd_goBack') })) {
+                run(() => api.installAppUpdate());
+              }
+            },
+          })
+          : S.appUpdate && S.appUpdate.available
           ? button(t('update'), { size: 'sm', variant: 'primary', icon: 'download', disabled: S.appUpdate.busy, onClick: () => run(() => api.installAppUpdate()) })
           : null))),
     h('section', { class: 'card card-pad stack' },
       h('div', { class: 'switch-row' },
         h('div', { class: 'txt' }, h('span', null, t('upd_auto')), h('span', null, t('upd_auto_d'))),
         toggle(S.settings.autoCheckUpdates, (v) => run(() => api.setSettings({ autoCheckUpdates: v })), { label: t('upd_auto') })),
+      h('div', { class: 'switch-row' },
+        h('div', { class: 'txt' }, h('span', null, t('upd_beta')), h('span', null, t('upd_beta_d'))),
+        toggle(S.settings.betaUpdates, (v) => run(() => api.setSettings({ betaUpdates: v })), { label: t('upd_beta') })),
       h('div', { class: 'note good' }, icon('shield', 16), h('span', null, t('upd_security')))));
 }

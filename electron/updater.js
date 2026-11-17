@@ -226,6 +226,13 @@ class Updater extends EventEmitter {
     throw lastErr;
   }
 
+  /** The most recent releases and pre-releases (newest first), for the test-version channel. */
+  async releases(repo) {
+    const json = JSON.parse(await this.fetch(`https://api.github.com/repos/${repo}/releases?per_page=20`));
+    if (!Array.isArray(json)) throw new Error('bad release data');
+    return json;
+  }
+
   async latestRelease(repo) {
     const json = JSON.parse(await this.fetch(`https://api.github.com/repos/${repo}/releases/latest`));
     if (!json || typeof json.tag_name !== 'string') throw new Error('bad release data');

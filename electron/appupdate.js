@@ -18,28 +18,59 @@ const TAR = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.
 const ROBOCOPY = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'Robocopy.exe');
 const PS = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 
-/** 1.2.10 > 1.2.9; pre-release tags (1.3.0-beta) are ignored. */
-function newer(a, b) {
-  const p = (v) => String(v).replace(/^v/, '').split('.').map((x) => Number.parseInt(x, 10) || 0);
-  const x = p(a); const y = p(b);
-  for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
-  return false;
+// Versions: 1.0.3, or a test version of it such as 1.0.3-beta.2 (semantic versioning).
+const VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$/;
+
+/** a > b by semantic versioning: 1.2.10 > 1.2.9, and 1.0.3-beta.1 < 1.0.3-beta.2 < 1.0.3. */
+function compareVersions(a, b) {
+  const split = (v) => {
+    const [core, pre = ''] = String(v).replace(/^v/, '').split(/-(.*)/s);
+    return { n: core.split('.').map((x) => Number.parseInt(x, 10) || 0), pre: pre ? pre.split('.') : [] };
+  };
+  const x = split(a); const y = split(b);
+  for (let i = 0; i < 3; i++) if ((x.n[i] || 0) !== (y.n[i] || 0)) return (x.n[i] || 0) > (y.n[i] || 0) ? 1 : -1;
+  if (!x.pre.length || !y.pre.length) return x.pre.length === y.pre.length ? 0 : x.pre.length ? -1 : 1; // a release beats its test versions
+  for (let i = 0; i < Math.max(x.pre.length, y.pre.length); i++) {
+    const p = x.pre[i]; const q = y.pre[i];
+    if (p === undefined || q === undefined) return p === undefined ? -1 : 1;
+    const pn = /^\d+$/.test(p); const qn = /^\d+$/.test(q);
+    if (pn && qn && Number(p) !== Number(q)) return Number(p) > Number(q) ? 1 : -1;
+    if (pn !== qn) return pn ? -1 : 1; // numbers sort before words
+    if (!pn && p !== q) return p > q ? 1 : -1;
+  }
+  return 0;
 }
+const newer = (a, b) => compareVersions(a, b) > 0;
 
 function assetName(version, portable) {
   return portable ? `Best-v${version}-portable.zip` : `Best-Setup-v${version}.exe`;
 }
 
-/** { latest, available, asset, digest } for this kind of install, or null when not configured. */
-async function checkApp(updater, portable) {
+/**
+ * { latest, available, asset, digest } for this kind of install, or null when not configured.
+ * beta: also offer test versions (GitHub pre-releases); without it only official releases count.
+ */
+async function checkApp(updater, portable, beta = false) {
   if (!REPO_OK) return null;
-  const rel = await updater.latestRelease(REPO);
-  if (rel.prerelease || rel.draft) return { latest: '', available: false };
+  let rel;
+  if (beta) {
+    // The newest of the recent releases and pre-releases (drafts are never public).
+    const list = (await updater.releases(REPO)).filter((r) => r && !r.draft && VERSION.test(String(r.tag_name).replace(/^v/, '')));
+    rel = list.reduce((best, r) => (!best || newer(r.tag_name, best.tag_name) ? r : best), null);
+    if (!rel) return { latest: '', available: false };
+  } else {
+    rel = await updater.latestRelease(REPO);
+    if (rel.prerelease || rel.draft) return { latest: '', available: false };
+  }
   const latest = String(rel.tag_name).replace(/^v/, '');
-  if (!/^\d+\.\d+\.\d+$/.test(latest)) return { latest, available: false };
+  if (!VERSION.test(latest)) return { latest, available: false };
   const asset = (rel.assets || []).find((a) => a.name === assetName(latest, portable));
   const digest = asset && (/^sha256:([0-9a-f]{64})$/.exec(asset.digest || '') || [])[1];
-  return { latest, available: newer(latest, app.getVersion()) && Boolean(asset && digest), asset, digest };
+  const installed = app.getVersion();
+  // A test version is installed and test versions are turned off: the official release may be
+  // installed even though it is older ("back"), but only when the user asks for it.
+  const back = !beta && installed.includes('-') && !latest.includes('-') && compareVersions(latest, installed) < 0;
+  return { latest, available: (newer(latest, installed) || back) && Boolean(asset && digest), back, asset, digest };
 }
 
 /** Download, verify and hand over to the installer / swap script. Resolves when Best should quit. */
@@ -115,7 +146,8 @@ function pendingFile() { return path.join(app.getPath('userData'), 'update-pendi
 /**
  * Hand the verified installer to the "\Best\Updater" task (runs as SYSTEM, installs without the
  * administrator prompt). The task trusts nothing it gets from here: it takes GitHub's checksum and
- * only installs a newer official release. A small script, running as this user, waits for it and
+ * only installs a newer published release (or, from a test version, the latest official release).
+ * A small script, running as this user, waits for it and
  * opens Best again. False when the task is not there or cannot be started.
  */
 async function viaUpdaterTask(file, info) {
@@ -149,7 +181,8 @@ function failedTaskUpdate() {
   try {
     const p = JSON.parse(fs.readFileSync(pendingFile(), 'utf8'));
     fs.rmSync(pendingFile(), { force: true });
-    return p && /^\d+\.\d+\.\d+$/.test(p.version) && newer(p.version, app.getVersion()) ? p.version : '';
+    // (the target may also be older: back from a test version to the official release)
+    return p && VERSION.test(p.version) && p.version !== app.getVersion() ? p.version : '';
   } catch { return ''; }
 }
 
@@ -164,4 +197,4 @@ function launchIndependent(commandLine) {
     (e) => (e ? reject(new Error('UPDATE_START_FAILED')) : resolve())));
 }
 
-module.exports = { checkApp, applyApp, newer, failedTaskUpdate, REPO, REPO_OK };
+module.exports = { checkApp, applyApp, newer, compareVersions, failedTaskUpdate, REPO, REPO_OK };

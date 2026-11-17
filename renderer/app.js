@@ -8,7 +8,7 @@ import { renderRouting } from './pages/routing.js';
 import { renderLogs, appendLog } from './pages/logs.js';
 import { renderConnections, paintConnections, leaveConnections } from './pages/connections.js';
 import { renderSettings } from './pages/settings.js';
-import { renderUpdates, availableUpdates } from './pages/updates.js';
+import { renderUpdates, updateCount, updatesBanner } from './pages/updates.js';
 import { installShortcuts, showShortcuts } from './shortcuts.js';
 
 const api = window.best;
@@ -198,9 +198,11 @@ function animateSidebar(from, to) {
 // timer only keeps one pending change at a time.
 let peekTimer = 0;
 let peekWanted = null; // what the pending timer will do (null: nothing pending)
-// When the mouse was last pressed: focus that follows a click is not "keyboard focus".
-let lastPointerDown = -1e9;
-document.addEventListener('pointerdown', () => { lastPointerDown = performance.now(); }, true);
+// The menu opens for focus only right after Tab / Shift+Tab. Focus also arrives after a click, and
+// when the window comes back from the taskbar Windows gives it back to the button clicked last;
+// neither of those may open the menu.
+let lastTabKey = -1e9;
+document.addEventListener('keydown', (e) => { if (e.key === 'Tab' && !e.altKey && !e.ctrlKey && !e.metaKey) lastTabKey = performance.now(); }, true); // not Alt+Tab (switching windows)
 function peek(open, delay) {
   clearTimeout(peekTimer);
   peekWanted = open;
@@ -223,7 +225,7 @@ function sidebar() {
     'aria-pressed': String(!small), onClick: toggleSidebar,
   }, icon('pin', 17));
   const nav = (n) => {
-    const count = n.id === 'subs' ? S.subs.length : n.id === 'updates' ? availableUpdates().length : 0;
+    const count = n.id === 'subs' ? S.subs.length : n.id === 'updates' ? updateCount() : 0;
     return h('button', {
       type: 'button', class: 'nav-btn', 'aria-current': ui.page === n.id ? 'page' : undefined, title: t(n.label), 'aria-label': t(n.label),
       onClick: () => go(n.id), // an open-on-hover menu stays open: it closes when the mouse leaves it
@@ -236,11 +238,12 @@ function sidebar() {
     // Safety net: if the window was redrawn just as the mouse came in, "enter" can be missed.
     onMousemove: small ? () => { if (!ui.sidePeek && peekWanted !== true) peek(true, 0); } : undefined,
     onMouseleave: small ? () => peek(false, 0) : undefined,
-    onFocusin: small ? () => { if (performance.now() - lastPointerDown > 300) peek(true, 0); } : undefined, // keyboard (Tab) only; a mouse click must not hold it open
+    onFocusin: small ? () => { if (performance.now() - lastTabKey < 500) peek(true, 0); } : undefined, // keyboard (Tab) only
     onFocusout: small ? (e) => { if (!e.currentTarget.contains(e.relatedTarget)) peek(false, 0); } : undefined,
   }, h('div', { class: 'side-panel' },
   h('div', { class: 'brand' },
-    h('img', { src: 'logo.png', alt: '', title: small ? `Best ${S.version}` : undefined }),
+    // The logo opens Best's page on GitHub (code, releases).
+    h('button', { type: 'button', class: 'brand-logo', title: t('openGithub'), 'aria-label': t('openGithub'), onClick: () => api.openProject() }, h('img', { src: 'logo.png', alt: '' })),
     h('div', { class: 'brand-text' }, h('div', { class: 'brand-name' }, 'Best'), h('div', { class: 'brand-sub' }, `${t('version')} ${S.version}`)),
     pin),
   h('nav', { class: 'nav', 'aria-label': 'Main' },
@@ -278,7 +281,7 @@ export function render() {
   const scrolls = {};
   document.querySelectorAll('[data-scroll]').forEach((el) => { scrolls[el.dataset.scroll] = el.scrollTop; });
 
-  const page = h('main', { class: 'main' }, PAGES[ui.page]());
+  const page = h('main', { class: 'main' }, updatesBanner(), PAGES[ui.page]());
   const root = document.getElementById('app');
   const sideMode = sidebarCollapsed() ? 'small' : 'pinned';
   root.classList.toggle('side-small', sideMode === 'small');

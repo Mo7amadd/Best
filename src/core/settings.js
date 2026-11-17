@@ -41,6 +41,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   closeToTray: true,
   globalHotkey: true,
   autoCheckUpdates: true,
+  betaUpdates: false, // also install test versions (GitHub pre-releases)
   statsEnabled: true, // live speed and traffic counters
   webdavUrl: '', // WebDAV backups (password kept in the encrypted secrets file)
   webdavUser: '',
@@ -132,7 +133,7 @@ function sanitizeSettings(input) {
   for (const [k, list] of Object.entries(ENUMS)) {
     if (list.includes(src[k])) out[k] = src[k];
   }
-  for (const k of ['allowLan', 'sniffing', 'mux', 'fragment', 'tunStrictRoute', 'tunIpv6', 'autoStart', 'startMinimized', 'autoConnect', 'closeToTray', 'globalHotkey', 'autoCheckUpdates', 'subViaProxy', 'tun', 'statsEnabled', 'showExitIp', 'useSystemHosts', 'dnsIpv4Only', 'tunFakeIp', 'logToFile', 'sbMux', 'sbMuxPadding', 'sidebarCollapsed']) {
+  for (const k of ['allowLan', 'sniffing', 'mux', 'fragment', 'tunStrictRoute', 'tunIpv6', 'autoStart', 'startMinimized', 'autoConnect', 'closeToTray', 'globalHotkey', 'autoCheckUpdates', 'betaUpdates', 'subViaProxy', 'tun', 'statsEnabled', 'showExitIp', 'useSystemHosts', 'dnsIpv4Only', 'tunFakeIp', 'logToFile', 'sbMux', 'sbMuxPadding', 'sidebarCollapsed']) {
     if (typeof src[k] === 'boolean') out[k] = src[k];
   }
   out.socksPort = int(src.socksPort, 1025, 65535, d.socksPort);

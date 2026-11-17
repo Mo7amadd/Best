@@ -97,7 +97,12 @@ bdi.ltr { unicode-bidi: isolate; }
   display: flex; flex-direction: column; gap: 22px; height: 100%; padding: 46px 12px 16px;
   background: var(--sidebar); overflow-y: auto; overflow-x: hidden;
 }
-.brand { display: flex; align-items: center; gap: 12px; padding: 0 5px; min-height: 38px; -webkit-app-region: drag; white-space: nowrap; }
+/* Not a window-drag area: Windows treats drag areas like a title bar and sends the page no mouse
+   events there, so passing over the logo or the name closed the menu that opens on hover. */
+.brand { display: flex; align-items: center; gap: 12px; padding: 0 5px; min-height: 38px; -webkit-app-region: no-drag; white-space: nowrap; }
+.brand-logo { flex: 0 0 auto; display: inline-flex; padding: 0; border: 0; border-radius: 10px; background: transparent; cursor: pointer; transition: transform .12s ease, box-shadow .12s ease; }
+.brand-logo:hover { transform: scale(1.06); box-shadow: 0 0 0 2px var(--accent-soft); }
+.brand-logo:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .brand img { flex: 0 0 auto; }
 .brand img { width: 34px; height: 34px; border-radius: 10px; }
 .brand-name { font-weight: 700; font-size: 17px; font-family: Inter, sans-serif; letter-spacing: -.01em; }
@@ -476,6 +481,8 @@ html[dir="rtl"] .test-progress { padding: 8px 14px 8px 8px; }
 .upd-banner { display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 16px; border-radius: 14px; background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); font-size: 13px; }
 html[dir="rtl"] .upd-banner { padding: 10px 16px 10px 10px; }
 .upd-banner > .icon { color: var(--accent); }
+.main > .upd-banner { flex: none; margin: 0 24px 8px; }
+.upd-banner .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .badge.badge-accent { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
 /* Settings: column (masonry-style) layout, so short cards never leave gaps next to tall ones. */
 .settings { display: block; columns: 400px; column-gap: 16px; }

@@ -22,10 +22,11 @@ fs.writeFileSync(path.join(dataRoot, 'data', 'settings.json'), JSON.stringify({
   proxyMode: 'off', autoCheckUpdates: false, autoStart: false, closeToTray: false, globalHotkey: false, sidebarCollapsed: false,
 }));
 const cdpPort = await freePort();
+const mainPort = await freePort(); // the main process (to minimize / restore the real window)
 // A window hidden behind others would have its animations paused by Chromium and the checks would
 // wait forever: keep it rendering as if it were in front.
 const KEEP_RENDERING = ['--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', '--disable-background-timer-throttling', '--disable-features=CalculateNativeWinOcclusion'];
-const app = spawn(ELECTRON, [ROOT, `--remote-debugging-port=${cdpPort}`, ...KEEP_RENDERING], { env: { ...process.env, BEST_DEV_DATA: dataRoot }, stdio: 'ignore' });
+const app = spawn(ELECTRON, [`--inspect=127.0.0.1:${mainPort}`, ROOT, `--remote-debugging-port=${cdpPort}`, ...KEEP_RENDERING], { env: { ...process.env, BEST_DEV_DATA: dataRoot }, stdio: 'ignore' });
 
 async function connect(match) {
   for (let i = 0; i < 80; i++) {
@@ -61,7 +62,10 @@ async function connect(match) {
 const results = [];
 class Skip extends Error {}
 const CHECK_TIMEOUT = 30000; // one stuck check must not hang the whole run
+// UI_ONLY=<text>: run only the checks whose name contains it (quicker while fixing one thing).
+const ONLY = process.env.UI_ONLY || '';
 async function check(name, fn, ms = CHECK_TIMEOUT) {
+  if (ONLY && !name.includes(ONLY)) return;
   let timer;
   const limit = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`timed out after ${ms / 1000} s`)), ms); });
   try { await Promise.race([fn(), limit]); results.push([true, name]); } catch (e) { results.push([e instanceof Skip ? 'skip' : false, name, String(e.message || e).split('\n')[0]]); } finally { clearTimeout(timer); }
@@ -183,6 +187,21 @@ try {
     assert(!(await ev(`document.querySelector('aside').classList.contains('peek')`)), 'did not close at once');
   });
 
+  await check('side menu: no window-drag area inside it; the logo is a GitHub button', async () => {
+    // Windows sends a page no mouse events over a drag area (it acts as the title bar): passing over
+    // one closed the open-on-hover menu. Synthetic test input never sees that, so check the styles.
+    // The check must see a drag area where there is one (the title bar), or it proves nothing.
+    assert(await ev(`(() => { const s = getComputedStyle(document.querySelector('.titlebar')); return s.webkitAppRegion === 'drag' || s.getPropertyValue('app-region') === 'drag'; })()`), 'drag areas cannot be detected');
+    for (const collapsed of [true, false]) {
+      await setSettings({ sidebarCollapsed: collapsed }); await wait(300);
+      const drag = await ev(`[...document.querySelectorAll('aside.sidebar, aside.sidebar *')].filter((e) => getComputedStyle(e).webkitAppRegion === 'drag' || getComputedStyle(e).getPropertyValue('app-region') === 'drag').map((e) => e.className || e.tagName)`);
+      assert(!drag.length, `${collapsed ? 'unpinned' : 'pinned'}: drag areas in the side menu: ${drag.join(', ')}`);
+    }
+    const logo = await ev(`(() => { const b = document.querySelector('aside .brand-logo'); return b ? { tag: b.tagName, label: b.getAttribute('aria-label'), img: Boolean(b.querySelector('img')) } : null; })()`);
+    assert(logo && logo.tag === 'BUTTON' && logo.img && /GitHub|گیت‌هاب/.test(logo.label), `logo: ${JSON.stringify(logo)}`);
+    await setSettings({ sidebarCollapsed: true });
+  });
+
   await check('side menu: opens with the keyboard (Tab)', async () => {
     await move(600, 400); await wait(400);
     await ev('document.activeElement && document.activeElement.blur()');
@@ -193,6 +212,34 @@ try {
     assert(r.inMenu, 'Tab did not reach the menu');
     assert(r.open, 'menu did not open for keyboard focus');
     await ev('document.activeElement.blur()'); await wait(200);
+  });
+
+  await check('side menu: stays closed when the window comes back from the taskbar (focus was on a menu button)', async () => {
+    await setSettings({ sidebarCollapsed: true });
+    await move(600, 400); await wait(300);
+    const [bx, by] = await center('aside .nav .nav-btn:not(.nav-help)', 1);
+    await move(bx, by); await wait(300);
+    await click(bx, by); await wait(300);
+    await move(600, 400); await wait(500);
+    const before = await ev(`({ inMenu: Boolean(document.activeElement && document.activeElement.closest('aside')), open: document.querySelector('aside').classList.contains('peek') })`);
+    assert(before.inMenu, 'the click did not leave the focus on the menu button (test setup)');
+    assert(!before.open, 'menu still open after the mouse left (test setup)');
+    // Minimize and restore the real window (as from the taskbar), from the main process.
+    const target = (await (await fetch(`http://127.0.0.1:${mainPort}/json`)).json())[0];
+    const mws = new WebSocket(target.webSocketDebuggerUrl);
+    await new Promise((r, j) => { mws.addEventListener('open', r); mws.addEventListener('error', j); });
+    let mid = 0;
+    const inMain = (expression) => new Promise((r) => { const n = ++mid; const on = (m) => { const msg = JSON.parse(m.data); if (msg.id === n) { mws.removeEventListener('message', on); r(msg.result && msg.result.result && msg.result.result.value); } }; mws.addEventListener('message', on); mws.send(JSON.stringify({ id: n, method: 'Runtime.evaluate', params: { expression, includeCommandLineAPI: true, returnByValue: true } })); });
+    const win = "require('electron').BrowserWindow.getAllWindows().find((w) => /index/.test(w.webContents.getURL()))";
+    try {
+      assert(await inMain(`(${win}).minimize(), (${win}).isMinimized()`), 'window did not minimize');
+      await wait(700);
+      await inMain(`(${win}).restore(), (${win}).focus()`); await wait(900);
+    } finally { mws.close(); }
+    const after = await ev(`({ open: document.querySelector('aside').classList.contains('peek'), w: Math.round(document.querySelector('aside .side-panel').getBoundingClientRect().width) })`);
+    assert(!after.open && after.w < 100, `menu opened by itself after the window came back (width ${after.w})`);
+    await ev('document.activeElement && document.activeElement.blur()');
+    await ev(`[...document.querySelectorAll('aside .nav-btn')][0].click()`); await wait(300);
   });
 
   await check('side menu: pinning animates the page width (no jump) and is remembered', async () => {
@@ -404,6 +451,67 @@ try {
     const errs = page.errors.slice(before);
     assert(!bad.length && !errs.length, [...bad.slice(0, 6), ...errs.slice(0, 2).map((x) => `error: ${String(x).slice(0, 160)}`)].join(' | '));
   }, 420000);
+
+  await check('updates page: from a test version, "back to the release" asks first and installs nothing on cancel', async () => {
+    const n = await ev(`[...document.querySelectorAll('aside .nav .nav-btn')].findIndex((b) => b.getAttribute('data-page') === 'updates' || /به‌روزرسانی/.test(b.textContent))`);
+    assert(n >= 0, 'no updates button in the menu');
+    await ev(`[...document.querySelectorAll('aside .nav .nav-btn')][${n}].click()`); await wait(500);
+    // what the main process sends while a test version is installed and test versions are off
+    const fake = `(async () => { const m = await import(new URL('app.js', document.baseURI).href); m.S.version = '1.0.3-beta.1'; m.S.appUpdate = { configured: true, latest: '1.0.2', available: true, back: true, busy: false, progress: 0, error: '' }; m.render(); })()`;
+    await ev(fake); await wait(150);
+    const seen = await ev(`(() => { const r = document.querySelector('.upd-app'); return r ? r.textContent : ''; })()`);
+    assert(/بازگشت به نسخه‌ی اصلی/.test(seen) && /نسخه‌ی اصلی/.test(seen), `no way back shown: ${seen.slice(0, 120)}`);
+    await ev(fake);
+    await ev(`[...document.querySelectorAll('.upd-app .upd-actions button')].find((b) => /بازگشت/.test(b.textContent)).click()`); await wait(400);
+    const msg = await ev(`(() => { const m = document.querySelector('.modal-body'); return m ? m.textContent : ''; })()`);
+    assert(/1\.0\.3-beta\.1/.test(msg) && /1\.0\.2/.test(msg), `confirm dialog wrong: ${msg.slice(0, 120)}`);
+    await ev(`[...document.querySelectorAll('.modal-actions button')].find((b) => /انصراف/.test(b.textContent)).click()`); await wait(400);
+    assert(!(await ev(`Boolean(document.querySelector('.modal-body'))`)), 'dialog did not close');
+    assert(!(await ev(`best.getState().then((s) => Boolean(s.appUpdate && s.appUpdate.busy))`)), 'an install started after cancel');
+    assert(page.errors.length === 0, `errors: ${page.errors.slice(0, 2).join(' | ')}`);
+    await ev(`[...document.querySelectorAll('aside .nav-btn')][0].click()`); await wait(300);
+  });
+
+  await check('update bar: shows with the count on the menu; × closes it for good (also after a restart); a newer version brings it back', async () => {
+    await ev(`[...document.querySelectorAll('aside .nav-btn')][0].click()`); await wait(300); // servers page
+    const fake = (xray) => ev(`(async () => {
+      const m = await import(new URL('app.js', document.baseURI).href);
+      const items = (m.S.updates && m.S.updates.items) || {};
+      m.S.updates = { ...(m.S.updates || {}), items: { ...items, xray: { ...(items.xray || {}), available: true, latest: ${JSON.stringify(xray)}, busy: false, error: '' } } };
+      m.S.appUpdate = { configured: true, latest: '9.9.9', available: true, back: false, busy: false, progress: 0, error: '' };
+      m.render();
+    })()`);
+    const bar = () => ev(`(() => { const b = document.querySelector('.main > .upd-banner'); return b ? b.textContent : ''; })()`);
+    const badge = () => ev(`(() => { const b = [...document.querySelectorAll('aside .nav-btn .badge-accent')][0]; return b ? b.textContent.replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)) : ''; })()`);
+    await ev(`localStorage.removeItem('best.updatesBannerClosed')`);
+    await ev(`import(new URL('app.js', document.baseURI).href).then((m) => { m.ui.updatesBannerClosed = ''; })`);
+    await fake('99.0.0'); await wait(150);
+    const text = await bar();
+    assert(/Best 9\.9\.9/.test(text) && /Xray 99\.0\.0/.test(text), `bar missing or wrong: ${text.slice(0, 120)}`);
+    assert((await badge()) === '2', `menu count is ${await badge()}, not 2`);
+    await fake('99.0.0');
+    const [x, y] = await center('.upd-banner-close');
+    await click(x, y); await wait(300);
+    assert(!(await bar()), 'bar still there after ×');
+    assert((await badge()) === '2', 'menu count gone after closing the bar');
+    // a state update, and a restart (only what was saved counts), do not bring it back
+    await ev(`import(new URL('app.js', document.baseURI).href).then((m) => { m.ui.updatesBannerClosed = ''; })`);
+    await fake('99.0.0'); await wait(150);
+    assert(!(await bar()), 'bar came back for the same versions');
+    // a newer version shows it once more
+    await fake('99.0.1'); await wait(150);
+    assert(/Xray 99\.0\.1/.test(await bar()), 'bar did not come back for a newer version');
+    // never on the Updates page itself
+    const n = await ev(`[...document.querySelectorAll('aside .nav .nav-btn')].findIndex((b) => /به‌روزرسانی/.test(b.textContent))`);
+    await ev(`[...document.querySelectorAll('aside .nav .nav-btn')][${n}].click()`); await wait(400);
+    await fake('99.0.1'); await wait(150);
+    assert(!(await bar()), 'bar shown on the Updates page');
+    assert(page.errors.length === 0, `errors: ${page.errors.slice(0, 2).join(' | ')}`);
+    // back to the real state
+    await ev(`localStorage.removeItem('best.updatesBannerClosed')`);
+    await ev(`(async () => { const m = await import(new URL('app.js', document.baseURI).href); const s = await best.getState(); m.S.updates = s.updates; m.S.appUpdate = s.appUpdate; m.ui.updatesBannerClosed = ''; m.render(); })()`);
+    await ev(`[...document.querySelectorAll('aside .nav-btn')][0].click()`); await wait(300);
+  });
 
   await check('server editor opens and closes', async () => {
     await ev(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN', key: 'n', ctrlKey: true, bubbles: true }))`); await wait(500);

@@ -1086,8 +1086,8 @@ let appUpdateInfo = null;
 async function checkAppUpdate() {
   if (!appUpd.REPO_OK) return;
   try {
-    appUpdateInfo = await appUpd.checkApp(updater, PORTABLE);
-    appUpdate = { ...appUpdate, latest: (appUpdateInfo && appUpdateInfo.latest) || '', available: Boolean(appUpdateInfo && appUpdateInfo.available), error: '' };
+    appUpdateInfo = await appUpd.checkApp(updater, PORTABLE, settings.betaUpdates);
+    appUpdate = { ...appUpdate, latest: (appUpdateInfo && appUpdateInfo.latest) || '', available: Boolean(appUpdateInfo && appUpdateInfo.available), back: Boolean(appUpdateInfo && appUpdateInfo.back), error: '' };
   } catch (e) {
     appUpdate = { ...appUpdate, error: cleanText(e.message, 200) };
   }
@@ -1304,6 +1304,7 @@ const ipcActions = {
     if (before.autoStart !== settings.autoStart) applyLoginItem();
     if (before.globalHotkey !== settings.globalHotkey || JSON.stringify(before.hotkeys) !== JSON.stringify(settings.hotkeys)) applyGlobalHotkey();
     if (before.autoCheckUpdates !== settings.autoCheckUpdates) scheduleUpdateChecks();
+    if (before.betaUpdates !== settings.betaUpdates) checkAppUpdate(); // the other channel may have something else
     if (before.theme !== settings.theme && mainWin) {
       try { mainWin.setTitleBarOverlay(overlayColors()); mainWin.setBackgroundColor(themeBg()); } catch { /* ignore */ }
     }
@@ -1577,6 +1578,12 @@ function registerIpc() {
   handle('uwp:set', (add, remove) => loopback.setExempt(add, remove));
   handle('sys:relaunchAdmin', () => relaunchAsAdmin());
   handle('sys:openDataFolder', () => shell.openPath(dataDir()));
+  // Best's own GitHub page: a fixed address from package.json, nothing the page passes in.
+  handle('sys:openProject', async () => {
+    if (!appUpd.REPO_OK) return false;
+    await shell.openExternal(`https://github.com/${appUpd.REPO}`);
+    return true;
+  });
   handle('sys:copy', async (text) => { await clipboard.writeText(String(text || '').slice(0, 100000)); return true; });
   handle('sys:quit', () => { quitting = true; app.quit(); });
   handle('sys:showMain', () => { showMain(); if (trayWin) trayWin.hide(); });
