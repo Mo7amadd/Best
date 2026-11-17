@@ -1,0 +1,24 @@
+.tray-body { overflow: hidden; background: var(--bg); }
+.tray { height: 100vh; display: flex; flex-direction: column; gap: 14px; padding: 16px; border: 1px solid var(--border); border-radius: 0; }
+.tray-head { display: flex; align-items: center; justify-content: space-between; }
+.tray-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-family: Inter, sans-serif; }
+.tray-brand img { width: 24px; height: 24px; border-radius: 7px; }
+.tray-status { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text-3); }
+.tray-status.on { color: var(--accent); }
+.tray-status .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.tray-conn { display: flex; align-items: center; gap: 14px; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
+.tray-conn .power { width: 52px; height: 52px; box-shadow: none; }
+.tray-conn .power.on { box-shadow: 0 0 0 4px var(--accent-ring); }
+.tray-conn .info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tray-conn .info b { font-size: 16px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tray-conn .info span { font-size: 12px; color: var(--text-3); }
+.tray-list { display: flex; flex-direction: column; gap: 2px; }
+.tray-item { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 10px; border: 0; border-radius: 10px; background: transparent; color: var(--text); text-align: start; }
+.tray-item:hover { background: var(--hover); }
+.tray-item .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tray-item .ms { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-2); min-width: 60px; text-align: end; }
+.tray-meta { display: flex; justify-content: space-between; padding: 2px 4px 0; font-size: 12px; color: var(--text-4); }
+.tray-meta b { color: var(--text-2); font-weight: 500; }
+.tray-foot { margin-top: auto; display: flex; gap: 8px; }
+.tray-foot .btn { min-height: 40px; }
+.tray-foot .btn:first-child { flex: 1 1 auto; }

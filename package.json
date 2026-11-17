@@ -1,0 +1,117 @@
+{
+  "name": "best",
+  "productName": "Best",
+  "version": "1.0.0",
+  "description": "Best — desktop proxy client (Xray + sing-box)",
+  "main": "electron/main.js",
+  "private": true,
+  "author": "Best",
+  "homepage": "https://github.com/Mo7amadd/Best",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mo7amadd/Best.git"
+  },
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test \"test/*.test.js\"",
+    "validate": "node scripts/validate-configs.js",
+    "fonts": "node scripts/copy-fonts.js",
+    "icons": "node scripts/make-icons.js",
+    "dist": "npm run fonts && npm run icons && electron-builder --win nsis && node scripts/make-portable.js",
+    "art": "electron scripts/make-installer-art.js",
+    "test:ui": "node test/ui/run.mjs",
+    "test:perf": "node test/ui/perf.mjs",
+    "test:soak": "node test/ui/soak.mjs",
+    "test:live": "node test/live/connect.js"
+  },
+  "license": "GPL-3.0-or-later",
+  "devDependencies": {
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "country-flag-emoji-polyfill": "^0.1.10",
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0",
+    "vazirmatn": "^33.0.3"
+  },
+  "dependencies": {
+    "jsqr": "^1.4.0",
+    "qrcode": "^1.5.4",
+    "yaml": "^2.9.1"
+  },
+  "build": {
+    "appId": "com.best.client",
+    "productName": "Best",
+    "copyright": "Best",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "src/**/*",
+      "renderer/**/*",
+      "package.json",
+      "!**/*.map"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/cores",
+        "to": "cores"
+      },
+      {
+        "from": "resources/icons",
+        "to": "icons"
+      },
+      {
+        "from": "build/THIRD-PARTY-NOTICES.txt",
+        "to": "THIRD-PARTY-NOTICES.txt"
+      }
+    ],
+    "asar": true,
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "Best-Setup-v${version}.${ext}",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Best",
+      "uninstallDisplayName": "Best",
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "include": "build/installer.nsh",
+      "installerHeader": "build/installerHeader.bmp",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/uninstallerSidebar.bmp",
+      "installerHeaderIcon": "build/icon.ico",
+      "runAfterFinish": true,
+      "unicode": true
+    },
+    "electronDist": "node_modules/electron/dist",
+    "electronVersion": "45.3.2"
+  },
+  "best": {
+    "updateRepo": "Mo7amadd/Best"
+  }
+}
