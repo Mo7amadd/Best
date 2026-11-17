@@ -476,7 +476,8 @@ try {
     await ev(`[...document.querySelectorAll('aside .nav-btn')][0].click()`); await wait(300); // servers page
     const fake = (xray) => ev(`(async () => {
       const m = await import(new URL('app.js', document.baseURI).href);
-      const items = (m.S.updates && m.S.updates.items) || {};
+      // only what this test sets: a real new core version out today must not change the count
+      const items = Object.fromEntries(Object.entries((m.S.updates && m.S.updates.items) || {}).map(([k, v]) => [k, { ...v, available: false }]));
       m.S.updates = { ...(m.S.updates || {}), items: { ...items, xray: { ...(items.xray || {}), available: true, latest: ${JSON.stringify(xray)}, busy: false, error: '' } } };
       m.S.appUpdate = { configured: true, latest: '9.9.9', available: true, back: false, busy: false, progress: 0, error: '' };
       m.render();
