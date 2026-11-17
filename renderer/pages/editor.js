@@ -275,7 +275,8 @@ export async function openEditor(id, preset) {
   }
 
   function renderBody() {
-    if (draft.protocol === 'naive') draft.__quic = draft.network === 'quic';
+    // Worked out once per server (not on every redraw, which would undo the QUIC switch).
+    if (draft.protocol === 'naive' && draft.__quic === undefined) draft.__quic = draft.network === 'quic';
     const custom = draft.protocol === 'custom';
     const group = draft.protocol === 'group';
     const parts = [protocolPicker()];
@@ -288,7 +289,7 @@ export async function openEditor(id, preset) {
     if (!custom) {
       parts.push(pasteBox());
       parts.push(segmented([{ value: 'form', label: t('ed_form') }, { value: 'json', label: t('ed_json') }], mode, (m) => {
-        if (m === 'form' && !tryJson(false)) return;
+        if (m === 'form' && !tryJson(false)) return false;
         mode = m; renderBody();
       }, { small: true }));
     }

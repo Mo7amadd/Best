@@ -80,14 +80,14 @@ export function countryList() {
 export function serverName(s) { return s.remark || s.address || '—'; }
 
 export function formatBytes(b) {
-  if (!b) return num(0) + ' B';
-  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const u = t('bytesUnits').split(','); // B KB MB GB TB in the interface language
+  if (!b) return `${num(0)} ${u[0]}`;
   const i = Math.min(u.length - 1, Math.floor(Math.log(b) / Math.log(1024)));
   return `${num(Math.round((b / 1024 ** i) * 10) / 10)} ${u[i]}`;
 }
 
 /** Speed in bytes per second → "1.2 MB/s". */
-export function formatRate(b) { return `${formatBytes(b || 0)}/s`; }
+export function formatRate(b) { return `${formatBytes(b || 0)}${t('perSec')}`; }
 
 /** Live traffic numbers (once a second): only the few text nodes that show them are touched. */
 export function paintStats() {

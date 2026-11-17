@@ -557,6 +557,8 @@ html[dir="rtl"] .upd-banner { padding: 10px 16px 10px 10px; }
 
 /* Searchable lists */
 .menu-search-wrap { position: sticky; top: -6px; z-index: 1; margin: -6px -6px 4px; padding: 6px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+/* An item scrolled to (the chosen one on opening, arrow keys) must not end up under the sticky search box. */
+.menu-list:has(.menu-search-wrap) { scroll-padding-top: 56px; }
 .menu-search { width: 100%; height: 34px; font-size: 13px; }
 .menu-empty { padding: 10px 12px; color: var(--text-3); font-size: 13px; }
 .menu-item[hidden] { display: none; }

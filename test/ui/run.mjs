@@ -61,9 +61,9 @@ async function connect(match) {
 const results = [];
 class Skip extends Error {}
 const CHECK_TIMEOUT = 30000; // one stuck check must not hang the whole run
-async function check(name, fn) {
+async function check(name, fn, ms = CHECK_TIMEOUT) {
   let timer;
-  const limit = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`timed out after ${CHECK_TIMEOUT / 1000} s`)), CHECK_TIMEOUT); });
+  const limit = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`timed out after ${ms / 1000} s`)), ms); });
   try { await Promise.race([fn(), limit]); results.push([true, name]); } catch (e) { results.push([e instanceof Skip ? 'skip' : false, name, String(e.message || e).split('\n')[0]]); } finally { clearTimeout(timer); }
 }
 const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
@@ -133,6 +133,27 @@ try {
     assert(await ev(`Boolean(document.querySelector('.menu'))`), 'menu did not open from its button');
     await click(btn[0], btn[1]); await wait(250);
     assert(!(await ev(`Boolean(document.querySelector('.menu'))`)), 'second click did not close the menu');
+  });
+
+  await check('dropdown arrow: up while its menu is open (also through a redraw), down after every way of closing', async () => {
+    await ev(`[...document.querySelectorAll('aside .nav-btn')][0].click()`); await wait(400);
+    const btn = await center('#routing-sel');
+    const state = () => ev(`({ open: Boolean(document.querySelector('.menu')), arrow: document.querySelector('#routing-sel').getAttribute('aria-expanded') })`);
+    const expect = async (open, step) => { const s = await state(); assert(s.open === open && s.arrow === String(open), `${step}: menu ${s.open ? 'open' : 'closed'}, arrow ${s.arrow === 'true' ? 'up' : 'down'}`); };
+    await click(btn[0], btn[1]); await wait(250); await expect(true, 'opened');
+    await setSettings({ testConcurrency: 7 }); await expect(true, 'redraw while open');
+    await click(btn[0], btn[1]); await wait(250); await expect(false, 'second click on the button');
+    await click(btn[0], btn[1]); await wait(250); await expect(true, 'opened again');
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 }); await wait(250); await expect(false, 'Escape');
+    await click(btn[0], btn[1]); await wait(250);
+    const cur = await ev(`document.querySelector('#routing-sel .select-label').textContent.trim()`);
+    const i = await ev(`[...document.querySelectorAll('.menu [role=option]')].findIndex((b) => b.textContent.trim() !== ${JSON.stringify(cur)})`);
+    const op = await ev(`(() => { const r = document.querySelectorAll('.menu [role=option]')[${i}].getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+    await click(op[0], op[1]); await wait(400); await expect(false, 'after choosing');
+    await click(btn[0], btn[1]); await wait(250);
+    const away = await center('.conn-name .name'); // plain text, away from the side menu
+    await click(away[0], away[1]); await wait(250); await expect(false, 'click elsewhere');
+    await setSettings({ testConcurrency: 8 });
   });
 
   // ------------------------------------------------------------ side menu
@@ -249,6 +270,111 @@ try {
     assert(title === 'سرورها', `menu text after switching back: ${title}`);
     assert(page.errors.length === before, `errors: ${page.errors.slice(before).join(' | ')}`);
   });
+
+  // ------------------------------------------------------------ every control in the forms
+  // Real clicks on every dropdown, switch and choice button of a dialog: the choice must show at
+  // once, even when the form does not redraw (a dropdown once kept showing the old value).
+  await ev(`window.__skip = '[data-s="autoStart"], [data-s="allowLan"], [data-s="tun"], [data-s="globalHotkey"], [data-s="autoCheckUpdates"], .ctl-proxy, .tun-btn, .ctl:has(.tun-btn)';
+    window.__list = (sel) => [...document.querySelectorAll(sel)].filter((x) => !x.closest(window.__skip)); // never touch what changes Windows itself
+    window.__pt = (sel, i) => { const e = window.__list(sel)[i]; if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; };
+    window.__key = (el) => { const f = el.closest('.field, .switch-row, .ctl'); const l = f && f.querySelector('.field-label, .txt span, .section-label'); return l ? l.textContent.trim() : ''; };`);
+  async function sweep(root, where) {
+    const bad = [];
+    // dropdowns
+    for (let i = 0; i < 40; i++) {
+      const sel = `${root} .select-btn`;
+      const pos = await ev(`window.__pt(${JSON.stringify(sel)}, ${i})`);
+      if (!pos) break;
+      const key = await ev(`window.__key(window.__list(${JSON.stringify(sel)})[${i}]) || '#${i}'`);
+      const before = await ev(`window.__list(${JSON.stringify(sel)})[${i}].querySelector('.select-label').textContent`);
+      await click(pos[0], pos[1]); await wait(200);
+      const opts = await ev(`[...document.querySelectorAll('.menu [role=option]')].map((b) => b.textContent.trim())`);
+      const pick = opts.findIndex((o) => o && o !== before.trim());
+      if (pick < 0) { await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 }); await wait(150); continue; }
+      const op = await ev(`(() => { const e = document.querySelectorAll('.menu [role=option]')[${pick}]; if (!e) return null; e.scrollIntoView({ block: 'nearest' }); const r = e.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+      if (!op) { bad.push(`${where} › ${key}: its menu closed before a choice`); continue; }
+      await click(op[0], op[1]); await wait(200);
+      const now = await ev(`(() => { const all = [...window.__list(${JSON.stringify(sel)})]; const b = all.find((x) => (window.__key(x) || '') === ${JSON.stringify(key)}) || all[${i}]; return b ? b.querySelector('.select-label').textContent.trim() : '(gone)'; })()`);
+      // A choice saved by the main process may show the old value for a moment while an earlier
+      // update is still arriving; it must be right after a second at the latest.
+      let shown = now;
+      if (shown !== opts[pick]) { await wait(1000); shown = await ev(`(() => { const all = [...window.__list(${JSON.stringify(sel)})]; const b = all.find((x) => (window.__key(x) || '') === ${JSON.stringify(key)}) || all[${i}]; return b ? b.querySelector('.select-label').textContent.trim() : '(gone)'; })()`); }
+      if (shown !== opts[pick]) bad.push(`${where} › ${key}: picked “${opts[pick]}”, shows “${shown}”`);
+    }
+    // switches: on, then back
+    for (let i = 0; i < 30; i++) {
+      const sel = `${root} button[role=switch]:not([disabled])`;
+      const pos = await ev(`window.__pt(${JSON.stringify(sel)}, ${i})`);
+      if (!pos) break;
+      const key = await ev(`window.__key(window.__list(${JSON.stringify(sel)})[${i}]) || '#${i}'`);
+      const state = () => ev(`(() => { const all = [...window.__list(${JSON.stringify(sel)})]; const b = all.find((x) => window.__key(x) === ${JSON.stringify(key)}) || all[${i}]; return b ? b.getAttribute('aria-checked') : null; })()`);
+      const a = await state();
+      await click(pos[0], pos[1]); await wait(200);
+      const b = await state();
+      const pos2 = await ev(`(() => { const all = [...window.__list(${JSON.stringify(sel)})]; const x = all.find((y) => window.__key(y) === ${JSON.stringify(key)}) || all[${i}]; if (!x) return null; x.scrollIntoView({ block: 'center' }); const r = x.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+      if (!pos2) { bad.push(`${where} › switch ${key}: gone after one click`); continue; }
+      await click(pos2[0], pos2[1]); await wait(200);
+      const c = await state();
+      if (b === a || c !== a) bad.push(`${where} › switch ${key}: ${a} → ${b} → ${c}`);
+    }
+    // choice buttons: press one that is not pressed
+    for (let g = 0; g < 10; g++) {
+      const n = await ev(`(() => { const s = window.__list(${JSON.stringify(`${root} .seg`)})[${g}]; if (!s) return -1; return [...s.children].findIndex((b) => b.getAttribute('aria-pressed') !== 'true'); })()`);
+      if (n === -1) { if (!(await ev(`Boolean(window.__list(${JSON.stringify(`${root} .seg`)})[${g}])`))) break; continue; }
+      const label = await ev(`window.__list(${JSON.stringify(`${root} .seg`)})[${g}].children[${n}].textContent`);
+      if (label === 'JSON') continue; // switching the editor to its JSON view is covered elsewhere
+      const pos = await ev(`(() => { const b = window.__list(${JSON.stringify(`${root} .seg`)})[${g}].children[${n}]; b.scrollIntoView({ block: 'center' }); const r = b.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+      await click(pos[0], pos[1]); await wait(200);
+      const ok = await ev(`window.__list(${JSON.stringify(`${root} .seg-btn[aria-pressed="true"]`)}).some((b) => b.textContent === ${JSON.stringify(label)})`);
+      if (!ok) bad.push(`${where} › choice “${label}” not shown as chosen`);
+    }
+    return bad;
+  }
+
+  await check('server editor: every dropdown, switch and choice shows at once, for every protocol', async () => {
+    await ev(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN', key: 'n', ctrlKey: true, bubbles: true }))`); await wait(500);
+    assert(await ev(`Boolean(document.querySelector('.drawer'))`), 'editor did not open');
+    const protos = await ev(`[...document.querySelectorAll('.drawer .ed-proto')].map((b) => b.textContent)`);
+    const bad = [];
+    for (let p = 0; p < protos.length; p++) {
+      if (protos[p] === 'JSON') continue; // a text box only
+      const pos = await ev(`window.__pt('.drawer .ed-proto', ${p})`);
+      if (!pos) { bad.push(`protocol button ${protos[p]} not found`); continue; }
+      await click(pos[0], pos[1]); await wait(250);
+      bad.push(...(await sweep('.drawer', protos[p])));
+    }
+    await ev(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`); await wait(400);
+    if (await ev(`Boolean(document.querySelector('.drawer'))`)) { await ev(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`); await wait(400); }
+    assert(!bad.length, bad.slice(0, 6).join(' | '));
+  }, 240000);
+
+  await check('subscription editor: every dropdown and switch shows at once (switch also turns back)', async () => {
+    await ev(`best.importText('vless://b831381d-6324-4d53-ad4f-8cda48b30811@127.0.0.1:10?security=none&type=tcp#ui-front')`); // not the ui-test server (a duplicate is skipped)
+    await ev(`[...document.querySelectorAll('aside .nav-btn')][0].click()`); await wait(400);
+    const add = await ev(`window.__pt('.tab-add', 0)`);
+    await click(add[0], add[1]); await wait(500);
+    const root = await ev(`document.querySelector('.modal') ? '.modal' : document.querySelector('.drawer') ? '.drawer' : ''`);
+    assert(root, 'subscription editor did not open');
+    const bad = await sweep(root, 'subscription');
+    await ev(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`); await wait(400);
+    assert(!bad.length, bad.slice(0, 6).join(' | '));
+  }, 120000);
+
+  await check('every page: every dropdown, switch and choice works, no script errors', async () => {
+    const pages = await ev(`[...document.querySelectorAll('aside .nav-btn:not(.nav-help)')].map((b) => b.getAttribute('aria-label') || b.textContent.trim())`);
+    const before = page.errors.length;
+    const bad = [];
+    for (let p = 0; p < pages.length; p++) {
+      await ev(`[...document.querySelectorAll('aside .nav-btn:not(.nav-help)')][${p}].click()`); await wait(600);
+      await move(1300, 300); await wait(200); // mouse off the side menu
+      const name = await ev(`[...document.querySelectorAll('aside .nav-btn:not(.nav-help)')][${p}].getAttribute('aria-label')`);
+      bad.push(...(await sweep('main', name)));
+      if (await ev(`Boolean(document.querySelector('.overlay, .modal, .drawer'))`)) { await ev(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`); await wait(300); }
+    }
+    await setSettings({ language: 'fa', theme: 'dark', uiZoom: 1, density: 'comfortable' });
+    const errs = page.errors.slice(before);
+    assert(!bad.length && !errs.length, [...bad.slice(0, 6), ...errs.slice(0, 2).map((x) => `error: ${String(x).slice(0, 160)}`)].join(' | '));
+  }, 420000);
 
   await check('server editor opens and closes', async () => {
     await ev(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN', key: 'n', ctrlKey: true, bubbles: true }))`); await wait(500);

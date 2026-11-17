@@ -56,7 +56,7 @@ Best is free software under the [GNU General Public License v3.0 or later](LICEN
 
 Быстрый и приватный прокси-клиент для Windows на основе ядер Xray и sing-box. Ядро mihomo можно установить дополнительно.
 
-![Best](docs/screenshots/servers-en.png)
+![Best](docs/screenshots/servers-ru.png)
 
 **Скачать:** в разделе [Releases](../../releases/latest)
 

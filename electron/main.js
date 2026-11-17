@@ -65,6 +65,8 @@ if (!app.requestSingleInstanceLock()) {
 // ------------------------------------------------------------------ state
 // Plain settings can be read right away; encrypted files need the app to be ready (DPAPI).
 let settings = sanitizeSettings(readJson('settings.json', {}));
+// No routing file yet = first run (then "my country" is taken from Windows once; "Not set" chosen later stays).
+const firstRouting = readJson('routing.json', null) === null;
 let routing = sanitizeRouting(readJson('routing.json', DEFAULT_ROUTING));
 let servers = [];
 let activeId = '';
@@ -1687,7 +1689,7 @@ app.whenReady().then(async () => {
   });
 
   loadEncryptedState();
-  if (!routing.country) {
+  if (firstRouting && !routing.country) {
     // First run: "my country" = the country Windows is set to.
     const cc = String(app.getLocaleCountryCode() || '').toLowerCase();
     if (/^[a-z]{2}$/.test(cc)) { routing = sanitizeRouting({ ...routing, country: cc }); saveRouting(); }

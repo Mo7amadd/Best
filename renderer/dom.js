@@ -105,6 +105,8 @@ function morphNode(o, n) {
       const keep = [...o.classList].filter((c) => TRANSIENT.has(c) && !n.classList.contains(c));
       if (keep.length) v = `${value} ${keep.join(' ')}`.trim();
     }
+    // The button whose menu is open stays marked open (its arrow pointing up) through a redraw.
+    if (name === 'aria-expanded' && o === openMenuAnchor) continue;
     if (o.getAttribute(name) !== v) o.setAttribute(name, v);
   }
   for (const { name } of [...o.attributes]) {
@@ -205,40 +207,61 @@ export function button(label, { icon: ic, variant = '', onClick, title, disabled
   }, ic ? icon(ic, size === 'sm' ? 15 : 16) : null, label ? h('span', null, label) : null);
 }
 
+// segmented / toggle read their current state from the page and show a click at once: the value
+// they were drawn with may be old (a caller that does not redraw, or one still saving).
 export function segmented(options, value, onChange, { label, small } = {}) {
   return h('div', { class: `seg ${small ? 'seg-sm' : ''}`, role: 'group', 'aria-label': label },
     options.map((o) => h('button', {
       type: 'button', class: 'seg-btn', 'aria-pressed': String(o.value === value),
-      onClick: () => { if (o.value !== value) onChange(o.value); },
+      onClick: (e) => {
+        const btn = e.currentTarget;
+        if (btn.getAttribute('aria-pressed') === 'true') return;
+        const before = [...btn.parentElement.children].map((b) => b.getAttribute('aria-pressed'));
+        for (const b of btn.parentElement.children) b.setAttribute('aria-pressed', String(b === btn));
+        // onChange may refuse the choice by returning false (e.g. invalid JSON): show the old one again.
+        if (onChange(o.value) === false) [...btn.parentElement.children].forEach((b, i) => b.setAttribute('aria-pressed', before[i]));
+      },
     }, o.label)));
 }
 
 export function toggle(checked, onChange, { label, disabled, id } = {}) {
   return h('button', {
     type: 'button', role: 'switch', class: 'switch', 'aria-checked': String(Boolean(checked)), 'aria-label': label, disabled, id,
-    onClick: () => onChange(!checked),
+    onClick: (e) => {
+      const next = e.currentTarget.getAttribute('aria-checked') !== 'true';
+      e.currentTarget.setAttribute('aria-checked', String(next));
+      onChange(next);
+    },
   }, h('span', { class: 'switch-knob' }));
 }
 
 /** Themed dropdown (replaces the native <select>, whose popup cannot be styled on Windows). */
 export function select(options, value, onChange, attrsIn = {}) {
   const { search, ...attrs } = attrsIn; // search: show a filter box (default: long lists)
-  const current = options.find((o) => o.value === value) || options[0] || { label: '' };
-  const btn = h('button', {
-    type: 'button', class: 'input select-btn', 'aria-haspopup': 'listbox', 'aria-expanded': 'false', ...attrs,
-  }, h('span', { class: 'select-label' }, current.label), icon('chevron', 16, 2.2));
-  const open = () => {
-    btn.setAttribute('aria-expanded', 'true');
-    showMenu(btn, options.map((o) => ({
-      label: o.label, icon: o.value === value ? 'check' : null, checked: o.value === value, search: o.search,
-      onClick: () => { if (o.value !== value) onChange(o.value); },
+  const labelOf = (v) => (options.find((o) => o.value === v) || options[0] || { label: '' }).label;
+  // The choice is kept here and shown at once: a caller that does not redraw (e.g. a field of the
+  // server editor) must still see what was picked. Handlers go through h() (not addEventListener),
+  // so a redraw that keeps this button also gives it the new value and onChange.
+  let cur = value;
+  const open = (btn) => {
+    const menu = showMenu(btn, options.map((o) => ({
+      label: o.label, icon: o.value === cur ? 'check' : null, checked: o.value === cur, search: o.search,
+      onClick: () => {
+        if (o.value === cur) return;
+        cur = o.value;
+        const l = btn.querySelector('.select-label');
+        if (l) l.textContent = o.label;
+        onChange(o.value);
+      },
     })), { minWidth: btn.offsetWidth, onClose: () => btn.setAttribute('aria-expanded', 'false'), role: 'listbox', search: search ?? options.length > 15 });
+    // Marked open only when a menu really opened: a click that closed it must leave the arrow down.
+    if (menu) btn.setAttribute('aria-expanded', 'true');
   };
-  btn.addEventListener('click', open);
-  btn.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); open(); }
-  });
-  return btn;
+  return h('button', {
+    type: 'button', class: 'input select-btn', 'aria-haspopup': 'listbox', 'aria-expanded': 'false', ...attrs,
+    onClick: (e) => open(e.currentTarget),
+    onKeydown: (e) => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); open(e.currentTarget); } },
+  }, h('span', { class: 'select-label' }, labelOf(value)), icon('chevron', 16, 2.2));
 }
 
 // --------------------------------------------------------------------------- floating UI
@@ -266,7 +289,7 @@ export function closeMenu() {
 export function showMenu(anchorOrPoint, items, opts = {}) {
   if (anchorOrPoint instanceof Element && performance.now() - closedBy.at < 500 && closedBy.sig === anchorSig(anchorOrPoint)) {
     closedBy = { sig: '', at: -1e9 };
-    return;
+    return null; // this click only closed the menu
   }
   closeMenu();
   const itemRole = opts.role === 'listbox' ? 'option' : 'menuitem';
@@ -342,6 +365,7 @@ export function showMenu(anchorOrPoint, items, opts = {}) {
     if (e.key === 'ArrowUp') { e.preventDefault(); list[(i - 1 + list.length) % list.length].focus(); }
     if (e.key === 'Escape') closeMenu();
   });
+  return menu;
 }
 
 document.addEventListener('mousedown', (e) => {
