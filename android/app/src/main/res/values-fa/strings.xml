@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="channel_vpn">اتصال VPN</string>
+    <string name="webview_too_old">لطفاً «Android System WebView» را از فروشگاه برنامه‌ها به‌روز کنید و دوباره Best را باز کنید.</string>
+    <string name="widget_on">متصل</string>
+    <string name="widget_off">متصل نیست</string>
+    <string name="widget_busy">کمی صبر کنید…</string>
+    <string name="widget_desc">وصل و قطع با یک لمس</string>
+    <string name="shortcut_toggle">وصل / قطع</string>
+    <string name="shortcut_scan">اسکن کد QR</string>
+    <string name="tasker_start">اتصال</string>
+    <string name="tasker_stop">قطع اتصال</string>
+    <string name="tasker_toggle">وصل / قطع</string>
+</resources>

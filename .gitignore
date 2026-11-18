@@ -3,3 +3,12 @@ dist/
 _downloads/
 # core programs (~150 MB) are downloaded, not written here; copies stay in _downloads
 resources/cores/
+# Android: build output, local paths and downloaded binaries (fetched and hash-checked, not written here)
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/local.properties
+android/app/libs/*.aar
+android/app/src/main/assets/web/gen/
+android/app/src/main/jniLibs/

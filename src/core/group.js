@@ -24,6 +24,8 @@ function normalizeGroup(input) {
     strategy: STRATEGIES.includes(input.strategy) ? input.strategy : 'leastPing',
     members: (Array.isArray(input.members) ? input.members : []).filter((x) => ID.test(String(x))).slice(0, 200),
     memberSub: ID.test(input.memberSub || '') ? input.memberSub : '',
+    // Used when every member fails (Best for Android; kept so backups move both ways).
+    fallback: ID.test(input.fallback || '') ? input.fallback : '',
     subId: '',
   };
   if (Number.isFinite(input.delay)) out.delay = input.delay;
@@ -136,6 +138,8 @@ function buildComposite(plan, settings, routing, { loopPorts = [], loopbackPort 
       targets = x.needsLoopback(first) ? ['loop-out'] : ['proxy'];
     }
     if (plan.front) xrayChain(base, plan.front, settings, x, targets, frontLoopPort);
+    // every server's own name with this computer's DNS (WireGuard members / front too)
+    x.withServerDns(base, [...(group ? plan.members : [first]), ...(plan.front ? [plan.front] : [])]);
     return base;
   }
   const base = sb.buildSingBoxConfig(first, settings, routing, { clashApi });

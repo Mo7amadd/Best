@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">Best</string>
+    <string name="channel_vpn">VPN connection</string>
+    <string name="webview_too_old">Please update “Android System WebView” from your app store, then open Best again.</string>
+    <string name="widget_on">Connected</string>
+    <string name="widget_off">Not connected</string>
+    <string name="widget_busy">Please wait…</string>
+    <string name="widget_desc">Connect or disconnect with one tap</string>
+    <string name="shortcut_toggle">Connect / disconnect</string>
+    <string name="shortcut_scan">Scan QR code</string>
+    <string name="tasker_start">Connect</string>
+    <string name="tasker_stop">Disconnect</string>
+    <string name="tasker_toggle">Connect / disconnect</string>
+</resources>

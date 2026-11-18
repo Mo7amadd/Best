@@ -27,7 +27,7 @@ const { PacServer } = require('./pac');
 const tester = require('./tester');
 const { Updater, extInstalled, mihomoInstalled, setElevated, cleanupOldCores, protectedInstall, allCoreExes } = require('./updater');
 const trayI18n = require('./tray-i18n');
-const { normalizeServer, toLink, serverKey, transportLabel, customInboundPorts, parseLink } = require('../src/core/links');
+const { normalizeServer, toLink, serverKey, sameConnection, transportLabel, customInboundPorts, parseLink } = require('../src/core/links');
 const { parseContent, parseUserInfo, splitInfoNodes } = require('../src/core/subscription');
 const { sanitizeSettings, sanitizeRouting, DEFAULT_ROUTING } = require('../src/core/settings');
 const { effectiveRouting, importRules, exportRules, profileFromPanelRouting } = require('../src/core/routing');
@@ -944,11 +944,15 @@ async function updateSub(sub) {
     saveSubs();
     throw new Error('EMPTY');
   }
-  // Replace this subscription's servers, keeping ids (and so the active selection) for unchanged ones.
+  // Replace this subscription's servers. The same server keeps its id (and so the selection) and its
+  // usage; its test results stay only when nothing but the name changed (a new SNI or Reality key
+  // makes an old result meaningless).
   const old = new Map(servers.filter((s) => s.subId === sub.id).map((s) => [serverKey(s), s]));
   const fresh = real.map((s) => {
     const prev = old.get(serverKey(s));
-    return prev ? { ...s, id: prev.id, delay: prev.delay, speed: prev.speed, udp: prev.udp, usageUp: prev.usageUp, usageDown: prev.usageDown } : s;
+    if (!prev) return s;
+    const kept = { ...s, id: prev.id, usageUp: prev.usageUp, usageDown: prev.usageDown };
+    return sameConnection(prev, s) ? { ...kept, delay: prev.delay, speed: prev.speed, udp: prev.udp } : kept;
   });
   const firstIdx = servers.findIndex((s) => s.subId === sub.id);
   const others = servers.filter((s) => s.subId !== sub.id);

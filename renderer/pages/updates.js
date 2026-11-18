@@ -159,8 +159,8 @@ export function renderUpdates() {
       ROWS.map(row),
       h('div', { class: 'upd-row upd-app' },
         h('div', { class: 'upd-name' }, h('b', null, 'Best'), h('span', { class: 'dim' }, t('upd_app_d'))),
-        h('div', { class: 'upd-ver' }, h('span', { class: 'dim' }, t('upd_current')), h('b', null, ltr(S.version, 'mono'))),
-        h('div', { class: 'upd-ver' }, h('span', { class: 'dim' }, t('upd_latest')), h('b', null, ltr((S.appUpdate && S.appUpdate.latest) || '—', 'mono')), /-/.test((S.appUpdate && S.appUpdate.latest) || '') ? h('span', { class: 'pill soft' }, t('upd_betaBadge')) : null),
+        h('div', { class: 'upd-ver' }, h('span', { class: 'dim' }, t('upd_current')), h('b', null, ltr(S.version, 'mono'))), // "1.0.4-beta.1" says it is a test version itself
+        h('div', { class: 'upd-ver' }, h('span', { class: 'dim' }, t('upd_latest')), h('b', null, ltr((S.appUpdate && S.appUpdate.latest) || '—', 'mono'))),
         h('div', { class: 'upd-status' }, appStatus()),
         h('div', { class: 'upd-actions' }, S.appUpdate && S.appUpdate.available && S.appUpdate.back
           ? button(t('upd_goBack'), {

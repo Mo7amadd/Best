@@ -253,6 +253,25 @@ try {
     assert(!(await ev(`best.getState().then((s) => s.settings.sidebarCollapsed)`)), 'pin not saved');
   });
 
+  await check('side menu: with a long test-version number, the pin button stays inside the menu in every language', async () => {
+    await setSettings({ sidebarCollapsed: false });
+    const bad = [];
+    for (const lang of ['fa', 'en', 'ru', 'zh']) {
+      await setSettings({ language: lang });
+      const r = await ev(`(async () => {
+        const m = await import(new URL('app.js', document.baseURI).href);
+        m.S.version = '10.12.13-beta.14'; m.render();
+        const p = document.querySelector('aside .side-panel').getBoundingClientRect(); const b = document.querySelector('.side-toggle').getBoundingClientRect();
+        return { inside: b.left >= p.left - 0.5 && b.right <= p.right + 0.5, mark: Boolean(document.querySelector('.brand-name .beta-pill')) };
+      })()`);
+      if (!r.inside) bad.push(`${lang}: pin button outside the menu`);
+      if (!r.mark) bad.push(`${lang}: no test-version mark`);
+    }
+    await setSettings({ language: 'fa' });
+    await ev(`(async () => { const m = await import(new URL('app.js', document.baseURI).href); m.S.version = (await best.getState()).version || m.S.version; m.render(); })()`);
+    assert(!bad.length, bad.join('; '));
+  });
+
   await check('side menu: narrow window has no pin button', async () => {
     await send('Emulation.setDeviceMetricsOverride', { width: 900, height: 820, deviceScaleFactor: 1, mobile: false }); await wait(500);
     assert(await ev(`document.querySelector('aside').classList.contains('small')`), 'not icons-only');
@@ -456,11 +475,18 @@ try {
     const n = await ev(`[...document.querySelectorAll('aside .nav .nav-btn')].findIndex((b) => b.getAttribute('data-page') === 'updates' || /به‌روزرسانی/.test(b.textContent))`);
     assert(n >= 0, 'no updates button in the menu');
     await ev(`[...document.querySelectorAll('aside .nav .nav-btn')][${n}].click()`); await wait(500);
+    // opening the page starts a check; its result would replace what this test sets
+    await ev(`(async () => { const m = await import(new URL('app.js', document.baseURI).href); for (let i = 0; i < 100 && m.S.updates && m.S.updates.checking; i++) await new Promise((r) => setTimeout(r, 100)); })()`); await wait(400);
     // what the main process sends while a test version is installed and test versions are off
     const fake = `(async () => { const m = await import(new URL('app.js', document.baseURI).href); m.S.version = '1.0.3-beta.1'; m.S.appUpdate = { configured: true, latest: '1.0.2', available: true, back: true, busy: false, progress: 0, error: '' }; m.render(); })()`;
     await ev(fake); await wait(150);
     const seen = await ev(`(() => { const r = document.querySelector('.upd-app'); return r ? r.textContent : ''; })()`);
     assert(/بازگشت به نسخه‌ی اصلی/.test(seen) && /نسخه‌ی اصلی/.test(seen), `no way back shown: ${seen.slice(0, 120)}`);
+    // the installed test version is marked next to the name in the menu; on this page the number
+    // itself ("1.0.3-beta.1") says it, so no extra mark under it
+    const marks = await ev(`({ menu: (document.querySelector('.brand-name .beta-pill') || {}).textContent || '', page: document.querySelectorAll('.upd-app .upd-ver .pill').length })`);
+    assert(marks.menu === 'آزمایشی', `no test-version mark next to the name in the menu: "${marks.menu}"`);
+    assert(marks.page === 0, `${marks.page} extra mark(s) under the version numbers`);
     await ev(fake);
     await ev(`[...document.querySelectorAll('.upd-app .upd-actions button')].find((b) => /بازگشت/.test(b.textContent)).click()`); await wait(400);
     const msg = await ev(`(() => { const m = document.querySelector('.modal-body'); return m ? m.textContent : ''; })()`);
@@ -476,7 +502,8 @@ try {
     await ev(`[...document.querySelectorAll('aside .nav-btn')][0].click()`); await wait(300); // servers page
     const fake = (xray) => ev(`(async () => {
       const m = await import(new URL('app.js', document.baseURI).href);
-      const items = (m.S.updates && m.S.updates.items) || {};
+      // only what this test sets: a real new core version out today must not change the count
+      const items = Object.fromEntries(Object.entries((m.S.updates && m.S.updates.items) || {}).map(([k, v]) => [k, { ...v, available: false }]));
       m.S.updates = { ...(m.S.updates || {}), items: { ...items, xray: { ...(items.xray || {}), available: true, latest: ${JSON.stringify(xray)}, busy: false, error: '' } } };
       m.S.appUpdate = { configured: true, latest: '9.9.9', available: true, back: false, busy: false, progress: 0, error: '' };
       m.render();

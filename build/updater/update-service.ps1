@@ -57,9 +57,42 @@ try {
 
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
   $headers = @{ 'User-Agent' = 'Best-updater' }
+  # Versions and checksums come from github.com itself: GitHub's API allows only 60 requests an hour
+  # per address without an account, often used up where many people share one address. The API is
+  # only asked when github.com gives nothing usable.
+  function Get-LatestTag {
+    try {
+      $r = Invoke-WebRequest -Uri "https://github.com/$repo/releases/latest" -Method Head -UseBasicParsing -Headers $headers -TimeoutSec 60
+      $u = [string]$r.BaseResponse.ResponseUri.AbsoluteUri
+      if ($u -match ('^https://github\.com/' + [regex]::Escape($repo) + '/releases/tag/v([0-9A-Za-z.+-]+)/?$')) { return $Matches[1] }
+    } catch { }
+    $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest" -Headers $headers -TimeoutSec 60
+    if ($rel.draft -or $rel.prerelease) { throw 'unexpected latest release' }
+    return ([string]$rel.tag_name -replace '^v', '')
+  }
+  # SHA-256 of a file of release v<ver>: the SHA256SUMS published with it (only a published release
+  # can be downloaded from, never a draft), else GitHub's own record through the API.
+  function Get-Digest([string]$ver, [string]$file) {
+    try {
+      $t = (Invoke-WebRequest -Uri "https://github.com/$repo/releases/download/v$ver/SHA256SUMS" -UseBasicParsing -Headers $headers -TimeoutSec 60).Content
+      if ($t -is [byte[]]) { $t = [Text.Encoding]::UTF8.GetString($t) }
+      foreach ($line in ([string]$t -split "`r?`n")) {
+        if ($line.Trim() -match '^([0-9a-fA-F]{64})\s+\*?(\S.*)$') {
+          $h = $Matches[1]
+          if ((Split-Path -Leaf $Matches[2]) -eq $file) { return $h.ToLower() }
+        }
+      }
+    } catch { }
+    $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/tags/v$ver" -Headers $headers -TimeoutSec 60
+    if ($rel.draft -or [string]$rel.tag_name -ne "v$ver") { throw "unexpected release 'v$ver'" }
+    $a = @($rel.assets | Where-Object { $_.name -eq $file })[0]
+    if ($a -and [string]$a.digest -match '^sha256:([0-9a-f]{64})$') { return $Matches[1] }
+    throw "no checksum for $file"
+  }
+
   # A version Best asked for (its downloaded installer in the drop folder, e.g. a test version when
-  # the user chose test versions); otherwise the newest official release. Either way GitHub must
-  # list it as a published release, and its checksum comes from there.
+  # the user chose test versions); otherwise the newest official release. Either way it has to be a
+  # published release on GitHub, and its checksum comes from there.
   $asked = @(Get-ChildItem -LiteralPath $incoming -File -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -match '^Best-Setup-v(.+)\.exe$' -and $Matches[1] -match $VersionPattern } |
     ForEach-Object { $_.Name -replace '^Best-Setup-v(.+)\.exe$', '$1' })
@@ -71,29 +104,19 @@ try {
     $fits = (Compare-Version $v $current) -gt 0 -or ($isTest -and -not $v.Contains('-'))
     if ($fits -and (-not $wanted -or (Compare-Version $v $wanted) -gt 0)) { $wanted = $v }
   }
-  if ($wanted) {
-    $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/tags/v$wanted" -Headers $headers -TimeoutSec 60
-  } else {
-    $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest" -Headers $headers -TimeoutSec 60
-  }
-  $tag = [string]$rel.tag_name -replace '^v', ''
-  if ($rel.draft -or $tag -notmatch $VersionPattern -or ($wanted -and $tag -ne $wanted) -or (-not $wanted -and $rel.prerelease)) { throw "unexpected release '$tag'" }
+  if ($wanted) { $tag = $wanted } else { $tag = Get-LatestTag }
+  if ($tag -notmatch $VersionPattern -or (-not $wanted -and $tag.Contains('-'))) { throw "unexpected release '$tag'" }
   if ((Compare-Version $tag $current) -le 0) {
-    # Back from a test version: only to the official release GitHub lists as the latest one,
+    # Back from a test version: only to the official release GitHub names as the latest one,
     # never to any other older version.
-    $official = $null
-    if ($wanted -and $isTest -and -not $rel.prerelease -and -not $tag.Contains('-')) {
-      $official = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest" -Headers $headers -TimeoutSec 60
-    }
-    if (-not $official -or $official.draft -or $official.prerelease -or [string]$official.tag_name -ne "v$tag") {
-      Log "nothing newer than $current (asked $tag)"; exit 0
-    }
+    $official = ''
+    if ($wanted -and $isTest -and -not $tag.Contains('-')) { $official = Get-LatestTag }
+    if ($official -ne $tag) { Log "nothing newer than $current (asked $tag)"; exit 0 }
     Log "going back from test version $current to the official release $tag"
   }
   $name = "Best-Setup-v$tag.exe"
-  $asset = @($rel.assets | Where-Object { $_.name -eq $name })[0]
-  if (-not $asset -or [string]$asset.digest -notmatch '^sha256:([0-9a-f]{64})$') { throw "no checksum for $name" }
-  $want = $Matches[1]
+  $want = Get-Digest $tag $name
+  $url = "https://github.com/$repo/releases/download/v$tag/$name"
 
   New-Item -ItemType Directory -Force -Path $work | Out-Null
   Get-ChildItem -LiteralPath $work -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
@@ -102,7 +125,7 @@ try {
   if (Test-Path -LiteralPath $given) { Copy-Item -LiteralPath $given -Destination $file -Force }
   if (-not (Test-Path -LiteralPath $file) -or (Sha256 $file) -ne $want) {
     Log "downloading $name"
-    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $file -UseBasicParsing -TimeoutSec 1800 -Headers @{ 'User-Agent' = 'Best-updater' }
+    Invoke-WebRequest -Uri $url -OutFile $file -UseBasicParsing -TimeoutSec 1800 -Headers @{ 'User-Agent' = 'Best-updater' }
   }
   if ((Sha256 $file) -ne $want) { throw "checksum of $name does not match the release" }
 

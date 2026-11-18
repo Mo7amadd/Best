@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="channel_vpn">VPN 连接</string>
+    <string name="webview_too_old">请在应用商店更新“Android System WebView”，然后重新打开 Best。</string>
+    <string name="widget_on">已连接</string>
+    <string name="widget_off">未连接</string>
+    <string name="widget_busy">请稍候…</string>
+    <string name="widget_desc">一键连接或断开</string>
+    <string name="shortcut_toggle">连接 / 断开</string>
+    <string name="shortcut_scan">扫描二维码</string>
+    <string name="tasker_start">连接</string>
+    <string name="tasker_stop">断开</string>
+    <string name="tasker_toggle">连接 / 断开</string>
+</resources>

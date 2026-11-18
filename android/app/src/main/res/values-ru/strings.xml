@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="channel_vpn">VPN-подключение</string>
+    <string name="webview_too_old">Обновите «Android System WebView» в магазине приложений и снова откройте Best.</string>
+    <string name="widget_on">Подключено</string>
+    <string name="widget_off">Не подключено</string>
+    <string name="widget_busy">Подождите…</string>
+    <string name="widget_desc">Подключение одним касанием</string>
+    <string name="shortcut_toggle">Подключить / отключить</string>
+    <string name="shortcut_scan">Сканировать QR-код</string>
+    <string name="tasker_start">Подключить</string>
+    <string name="tasker_stop">Отключить</string>
+    <string name="tasker_toggle">Подключить / отключить</string>
+</resources>
