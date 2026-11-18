@@ -205,7 +205,7 @@ npm install
 
 Best 是一款快速、注重隐私的 Windows 代理客户端，基于 Xray 和 sing-box 内核，也可以另外安装 mihomo 内核。
 
-![Best](docs/screenshots/servers-en.png)
+![Best](docs/screenshots/servers-zh.png)
 
 **下载：** 在 [Releases](../../releases/latest) 页面
 
