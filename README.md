@@ -24,6 +24,19 @@ The SHA-256 of each file is shown next to it on the release page. Best checks it
 - **Private by design.** Configs from subscriptions are cleaned before they run. Local ports listen on 127.0.0.1 only, sharing on the LAN always needs a password, and backups are encrypted.
 - English, Русский and فارسی (right to left), with several themes.
 
+### Android (test version)
+
+Best for Android (7.0 and newer) is in testing. Its releases are tagged `android-v…` and marked as pre-releases on the [Releases](../../releases) page.
+
+- `Best-android-vX.Y.Z-arm64-v8a.apk`: almost every phone
+- `Best-android-vX.Y.Z-armeabi-v7a.apk`: older 32-bit phones
+- `Best-android-vX.Y.Z-x86_64.apk` / `-x86.apk`: emulators such as BlueStacks
+- `Best-android-vX.Y.Z-universal.apk`: all of the above in one larger file
+
+Every common link and subscription, routing, and encrypted backups (to a file or your own WebDAV server). VPN for every app or only the ones you choose, or proxy only. Xray, with sing-box for TUIC, AnyTLS and Naive. A quick-settings tile, a home-screen widget, QR codes, and updates from GitHub that are checked against their SHA-256 before they install.
+
+To build it you need JDK 17, the Android SDK (platform 35) and Node.js 20 or newer. In the `android` folder, `node scripts/fetch-libs.mjs` and `node scripts/fetch-singbox.mjs` download the Xray library and sing-box (each checked by SHA-256), then `gradlew assembleDebug` builds the app.
+
 ### Build from source
 
 You need Windows 10 / 11 (64-bit), [Node.js](https://nodejs.org) 20 or newer and Git.
@@ -74,6 +87,19 @@ Best is free software under the [GNU General Public License v3.0 or later](LICEN
 - **Проверки.** Реальная задержка, UDP и скорость загрузки. «Самый быстрый» выбирает лучший сервер, а группы серверов сами переключаются, если сервер перестаёт работать.
 - **Приватность.** Конфигурации из подписок очищаются перед запуском. Локальные порты открыты только на 127.0.0.1, доступ из локальной сети всегда требует пароль, резервные копии шифруются.
 - English, Русский и فارسی (справа налево), несколько тем оформления.
+
+### Android (тестовая версия)
+
+Best для Android (7.0 и новее) сейчас тестируется. Его выпуски помечены тегом `android-v…` и отмечены как предварительные (pre-release) на странице [Releases](../../releases).
+
+- `Best-android-vX.Y.Z-arm64-v8a.apk`: почти все телефоны
+- `Best-android-vX.Y.Z-armeabi-v7a.apk`: старые 32-битные телефоны
+- `Best-android-vX.Y.Z-x86_64.apk` / `-x86.apk`: эмуляторы, например BlueStacks
+- `Best-android-vX.Y.Z-universal.apk`: всё вместе в одном файле побольше
+
+Все распространённые ссылки и подписки, маршрутизация и зашифрованные резервные копии (в файл или на свой сервер WebDAV). VPN для всех приложений или только для выбранных, либо только прокси. Xray, а для TUIC, AnyTLS и Naive — sing-box. Плитка быстрых настроек, виджет на главном экране, QR-коды и обновления с GitHub, которые проверяются по SHA-256 перед установкой.
+
+Для сборки нужны JDK 17, Android SDK (платформа 35) и Node.js 20 или новее. В папке `android` команды `node scripts/fetch-libs.mjs` и `node scripts/fetch-singbox.mjs` скачивают библиотеку Xray и sing-box (каждый файл проверяется по SHA-256), затем `gradlew assembleDebug` собирает приложение.
 
 ### Сборка из исходного кода
 
@@ -127,6 +153,19 @@ Best — свободная программа под лицензией [GNU Ge
 - **تست‌ها.** تأخیر واقعی، UDP و سرعت دانلود. «سریع‌ترین» بهترین سرور را انتخاب می‌کند و گروه سرورها وقتی سروری قطع شود خودشان سراغ سرور بعدی می‌روند.
 - **حریم خصوصی.** کانفیگ‌های اشتراک پیش از اجرا پاک‌سازی می‌شوند. پورت‌های محلی فقط روی 127.0.0.1 باز هستند، اشتراک‌گذاری در شبکه‌ی محلی همیشه رمز دارد و پشتیبان‌ها رمزگذاری می‌شوند.
 - فارسی (راست‌به‌چپ)، English و Русский، با چند تم.
+
+### اندروید (نسخه‌ی آزمایشی)
+
+برنامه‌ی Best برای اندروید (۷.۰ و بالاتر) در حال آزمایش است. نسخه‌های آن با تگ <code dir="ltr">android-v…</code> و به‌عنوان پیش‌انتشار (pre-release) در بخش [Releases](../../releases) قرار می‌گیرند.
+
+- تقریباً همه‌ی گوشی‌ها: <code dir="ltr">Best-android-vX.Y.Z-arm64-v8a.apk</code>
+- گوشی‌های قدیمی ۳۲ بیتی: <code dir="ltr">Best-android-vX.Y.Z-armeabi-v7a.apk</code>
+- شبیه‌سازها مثل BlueStacks: <code dir="ltr">Best-android-vX.Y.Z-x86_64.apk</code> یا <code dir="ltr">-x86.apk</code>
+- همه‌ی این‌ها در یک فایل بزرگ‌تر: <code dir="ltr">Best-android-vX.Y.Z-universal.apk</code>
+
+همه‌ی لینک‌ها و اشتراک‌های رایج، مسیریابی، و پشتیبان رمزدار (در فایل یا روی سرور WebDAV خودتان). VPN برای همه‌ی برنامه‌ها یا فقط برنامه‌های انتخابی، یا فقط پروکسی. هسته‌ی Xray، و برای TUIC، AnyTLS و Naive هسته‌ی sing-box. کاشی تنظیمات سریع، ویجت صفحه‌ی اصلی، کد QR، و به‌روزرسانی از گیت‌هاب که پیش از نصب با SHA-256 بررسی می‌شود.
+
+برای ساختن آن JDK 17، Android SDK (پلتفرم ۳۵) و Node.js نسخه‌ی ۲۰ یا بالاتر لازم است. در پوشه‌ی <code dir="ltr">android</code>، دستورهای <code dir="ltr">node scripts/fetch-libs.mjs</code> و <code dir="ltr">node scripts/fetch-singbox.mjs</code> کتابخانه‌ی Xray و sing-box را دانلود می‌کنند (هر کدام با SHA-256 بررسی می‌شود) و بعد <code dir="ltr">gradlew assembleDebug</code> برنامه را می‌سازد.
 
 ### ساخت از روی کد
 

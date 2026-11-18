@@ -24,7 +24,18 @@ test('versions sort by semantic versioning, test versions before their release',
 
 const asset = (v) => ({ name: `Best-Setup-v${v}.exe`, digest: 'sha256:' + 'a'.repeat(64), size: 100, browser_download_url: `https://example.invalid/${v}` });
 const rel = (v, extra = {}) => ({ tag_name: `v${v}`, draft: false, prerelease: v.includes('-'), assets: [asset(v)], ...extra });
-const fake = (latest, list) => ({ latestRelease: async () => latest, releases: async () => list });
+// The updater as checkApp sees it: tags from github.com (the feed never has drafts), no SHA256SUMS
+// file (releases before it), and the API for one release by its tag.
+const fake = (latest, list, sums = {}) => {
+  const api = [];
+  return {
+    api,
+    latestTag: async () => latest.tag_name,
+    releaseTags: async () => list.filter((r) => !r.draft).map((r) => r.tag_name),
+    publishedDigest: async (repo, tag, file, name) => sums[`${tag}/${name}`] || '',
+    releaseByTag: async (repo, tag) => { api.push(tag); const r = [latest, ...list].find((x) => x.tag_name === tag); if (!r) throw new Error('HTTP 404'); return r; },
+  };
+};
 
 test('official channel: only the latest official release', { skip: !REPO_OK }, async () => {
   installed = '1.0.2';
@@ -66,6 +77,16 @@ test('an official version installed: never offered an older one', { skip: !REPO_
   assert.deepStrictEqual([r.available, r.back], [false, false]);
   const r2 = await checkApp(fake(rel('1.0.2'), [rel('1.0.3-beta.2'), rel('1.0.2')]), false, true);
   assert.deepStrictEqual([r2.available, r2.back], [false, false]);
+});
+
+test('with a SHA256SUMS file in the release, no API request at all', { skip: !REPO_OK }, async () => {
+  installed = '1.0.2';
+  const hash = 'b'.repeat(64);
+  const f = fake(rel('1.0.3', { assets: [] }), [], { 'v1.0.3/Best-Setup-v1.0.3.exe': hash });
+  const r = await checkApp(f, false, false);
+  assert.deepStrictEqual([r.latest, r.available, r.digest], ['1.0.3', true, hash]);
+  assert.match(r.asset.browser_download_url, /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/v1\.0\.3\/Best-Setup-v1\.0\.3\.exe$/);
+  assert.deepStrictEqual(f.api, [], 'the API was asked');
 });
 
 test('a release without a checksum is not offered', { skip: !REPO_OK }, async () => {

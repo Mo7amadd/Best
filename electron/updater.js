@@ -16,7 +16,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
 const EventEmitter = require('events');
-const { app, session } = require('electron');
+const { app, session, net } = require('electron');
 
 const MAX_DOWNLOAD = 200 * 1024 * 1024;
 const TAR = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
@@ -32,6 +32,58 @@ const COMPONENTS = {
   geoIr: { repo: 'Chocolate4U/Iran-v2ray-rules', kind: 'ext', optional: true, files: [['geosite.dat', 'geosite_IR.dat'], ['geoip.dat', 'geoip_IR.dat']] },
   geoRu: { repo: 'runetfreedom/russia-v2ray-rules-dat', kind: 'ext', optional: true, files: [['geosite.dat', 'geosite_RU.dat'], ['geoip.dat', 'geoip_RU.dat']] },
 };
+
+// GitHub's API allows 60 requests an hour per address without an account, and many users share
+// one address (mobile operators, the same VPN server). So versions and checksums are read from
+// github.com itself, which has no such limit: the "latest release" redirect, the releases feed and
+// the checksum files published next to the downloads. The API is only the fallback.
+const SAFE_TAG = /^[\w.+-]{1,100}$/;
+const sameRepo = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
+function downloadUrl(repo, tag, name) {
+  return `https://github.com/${repo}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(name)}`;
+}
+/** ".../owner/repo/releases/tag/v1.2.3" (where /releases/latest leads) → "v1.2.3", else ''. */
+function tagFromReleaseUrl(url, repo) {
+  const m = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/releases\/tag\/([^/?#]+)\/?$/.exec(String(url || ''));
+  if (!m || !sameRepo(m[1], repo)) return '';
+  let tag = '';
+  try { tag = decodeURIComponent(m[2]); } catch { return ''; }
+  return SAFE_TAG.test(tag) ? tag : '';
+}
+/** Tags in the releases feed (published releases and pre-releases; drafts are never in it). */
+function tagsFromAtom(xml, repo) {
+  const out = [];
+  for (const m of String(xml || '').matchAll(/href="https:\/\/github\.com\/([^/"]+\/[^/"]+)\/releases\/tag\/([^"]+)"/g)) {
+    if (!sameRepo(m[1], repo)) continue;
+    let tag = '';
+    try { tag = decodeURIComponent(m[2]); } catch { continue; }
+    if (SAFE_TAG.test(tag) && !out.includes(tag)) out.push(tag);
+  }
+  return out;
+}
+/**
+ * The SHA-256 of `assetName` in a published checksum file: "SHA2-256= <hex>" (Xray's .dgst),
+ * "<hex>  <name>" lines (sha256sum, SHA256SUMS), or one bare hash. A list of several files must name
+ * the file; '' when it is not there.
+ */
+function digestFromSumFile(text, assetName) {
+  const s = String(text || '');
+  const lines = s.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const base = (n) => String(n).replace(/^\*/, '').split(/[\\/]/).pop();
+  for (const l of lines) {
+    const m = /^([0-9a-f]{64})\s+\*?(\S.*)$/i.exec(l);
+    if (m && base(m[2]) === assetName) return m[1].toLowerCase();
+  }
+  const dgst = /SHA2?-256\s*=\s*([0-9a-f]{64})/i.exec(s);
+  if (dgst) return dgst[1].toLowerCase();
+  if (lines.length === 1) {
+    const m = /^([0-9a-f]{64})(?:\s+\*?(\S.*))?$/i.exec(lines[0]);
+    if (m && (!m[2] || base(m[2]) === assetName)) return m[1].toLowerCase();
+  }
+  return '';
+}
+/** An HTTP answer that means "GitHub's API limit for this address is used up". */
+const rateLimited = (e) => /HTTP (403|429)/.test(String(e && e.message));
 
 function bundledDir() {
   return app.isPackaged ? path.join(process.resourcesPath, 'cores') : path.join(__dirname, '..', 'resources', 'cores');
@@ -187,7 +239,8 @@ class Updater extends EventEmitter {
   }
 
   /** `maxBytes` / `timeoutMs`: limits for one download (Best's own update is larger than a core). */
-  async fetch(url, { binary = false, onProgress, maxBytes = MAX_DOWNLOAD, timeoutMs = 600000, signal = null } = {}) {
+  /** `head`: only follow the redirects and return the final address (no body). */
+  async fetch(url, { binary = false, head = false, onProgress, maxBytes = MAX_DOWNLOAD, timeoutMs = 600000, signal = null } = {}) {
     // Try through the tunnel first when it is up (GitHub is often blocked), then direct.
     const port = this.getProxyPort();
     const attempts = port ? [`http=127.0.0.1:${port};https=127.0.0.1:${port}`, null] : [null];
@@ -196,12 +249,15 @@ class Updater extends EventEmitter {
       try {
         const ses = session.fromPartition('best-updates');
         await ses.setProxy(rules ? { proxyRules: rules } : { mode: 'direct' });
+        const api = url.startsWith('https://api.github.com/');
         const res = await ses.fetch(url, {
-          headers: { 'User-Agent': `Best/${app.getVersion()}`, Accept: binary ? 'application/octet-stream' : 'application/vnd.github+json' },
+          method: head ? 'HEAD' : 'GET',
+          headers: { 'User-Agent': `Best/${app.getVersion()}`, Accept: binary ? 'application/octet-stream' : api ? 'application/vnd.github+json' : '*/*' },
           redirect: 'follow', credentials: 'omit', cache: 'no-store',
           signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(binary ? timeoutMs : 20000)]) : AbortSignal.timeout(binary ? timeoutMs : 20000),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (head) return res.url;
         if (!binary) return await res.text();
         const total = Number(res.headers.get('content-length')) || 0;
         if (total > maxBytes) throw new Error('file too large');
@@ -224,6 +280,73 @@ class Updater extends EventEmitter {
       }
     }
     throw lastErr;
+  }
+
+  /**
+   * Where `url` redirects to, without following it ('' when it does not redirect). Electron's fetch
+   * does not tell the final address, so this uses net.request; tunnel first, then direct, like fetch.
+   */
+  async redirectTarget(url) {
+    const port = this.getProxyPort();
+    let lastErr;
+    for (const rules of port ? [`http=127.0.0.1:${port};https=127.0.0.1:${port}`, null] : [null]) {
+      try {
+        const ses = session.fromPartition('best-updates');
+        await ses.setProxy(rules ? { proxyRules: rules } : { mode: 'direct' });
+        return await new Promise((resolve, reject) => {
+          const req = net.request({ url, method: 'HEAD', session: ses, redirect: 'manual', credentials: 'omit', useSessionCookies: false });
+          const timer = setTimeout(() => { req.abort(); reject(new Error('timed out')); }, 20000);
+          const done = (fn) => (v) => { clearTimeout(timer); fn(v); };
+          req.setHeader('User-Agent', `Best/${app.getVersion()}`);
+          req.on('redirect', (status, method, to) => { done(resolve)(String(to || '')); req.abort(); });
+          req.on('response', (res) => { res.on('data', () => {}); res.on('error', () => {}); (res.statusCode < 400 ? done(resolve) : done(reject))(res.statusCode < 400 ? '' : new Error(`HTTP ${res.statusCode}`)); });
+          req.on('error', done(reject));
+          req.end();
+        });
+      } catch (e) { lastErr = e; }
+    }
+    throw lastErr;
+  }
+
+  /** Tag of the latest release: github.com's own redirect (no API limit), else the API. */
+  async latestTag(repo) {
+    try {
+      const tag = tagFromReleaseUrl(await this.redirectTarget(`https://github.com/${repo}/releases/latest`), repo);
+      if (tag) return tag;
+    } catch { /* the API below */ }
+    return (await this.latestRelease(repo)).tag_name;
+  }
+
+  /** Tags of the recent published releases and pre-releases: the feed (no API limit), else the API. */
+  async releaseTags(repo) {
+    try {
+      const tags = tagsFromAtom(await this.fetch(`https://github.com/${repo}/releases.atom`), repo);
+      if (tags.length) return tags;
+    } catch { /* the API below */ }
+    return (await this.releases(repo)).filter((r) => r && !r.draft).map((r) => r.tag_name);
+  }
+
+  /** SHA-256 of `assetName` from a checksum file published in that release ('' when none). */
+  async publishedDigest(repo, tag, sumName, assetName) {
+    try { return digestFromSumFile(await this.fetch(downloadUrl(repo, tag, sumName)), assetName); } catch { return ''; }
+  }
+
+  /**
+   * The latest release for an install: the API's answer when it gives one; when its limit is used up,
+   * the tag from github.com with no asset list (then only published checksum files are trusted).
+   */
+  async releaseInfo(repo) {
+    try { return await this.latestRelease(repo); } catch (e) {
+      if (!rateLimited(e)) throw e;
+      return { tag_name: await this.latestTag(repo), assets: null, repo, limited: true };
+    }
+  }
+
+  /** One release by its tag (API; also pre-releases, never drafts). */
+  async releaseByTag(repo, tag) {
+    const json = JSON.parse(await this.fetch(`https://api.github.com/repos/${repo}/releases/tags/${encodeURIComponent(tag)}`));
+    if (!json || typeof json.tag_name !== 'string') throw new Error('bad release data');
+    return json;
   }
 
   /** The most recent releases and pre-releases (newest first), for the test-version channel. */
@@ -257,24 +380,29 @@ class Updater extends EventEmitter {
     const found = [];
     for (const [id, c] of Object.entries(COMPONENTS)) {
       try {
-        const rel = await this.latestRelease(c.repo);
+        // No API request here (see latestTag): checking costs nothing of GitHub's hourly limit.
+        const tag = await this.latestTag(c.repo);
         const current = await this.currentVersion(id);
         let available;
         if (c.kind === 'core') {
           if (c.optional) this.set(id, { installed: Boolean(current) });
-          available = Boolean(current) && rel.tag_name.replace(/^v/, '') !== current;
+          available = Boolean(current) && tag.replace(/^v/, '') !== current;
         } else if (c.kind === 'ext') {
           const installed = extInstalled(id);
           this.set(id, { installed });
-          available = installed && current !== rel.tag_name;
+          available = installed && current !== tag;
         } else {
           // Geo files have no version inside; compare the active file's hash with the published one.
-          const asset = rel.assets.find((a) => a.name === c.asset(rel.tag_name));
-          const digest = asset && /^sha256:([0-9a-f]{64})$/.exec(asset.digest || '')?.[1];
+          let digest = await this.publishedDigest(c.repo, tag, c.sum, c.asset(tag));
+          if (!digest) {
+            const rel = await this.latestRelease(c.repo);
+            const asset = rel.assets.find((a) => a.name === c.asset(rel.tag_name));
+            digest = (asset && /^sha256:([0-9a-f]{64})$/.exec(asset.digest || '')?.[1]) || '';
+          }
           const localHash = await sha256File(path.join(geoDir(), c.file)).catch(() => '');
           available = Boolean(digest) && digest !== localHash;
         }
-        this.set(id, { current: current || (c.kind === 'geo' ? 'bundled' : ''), latest: rel.tag_name, available, error: '', custom: c.kind === 'ext' ? false : this.isCustom(id) });
+        this.set(id, { current: current || (c.kind === 'geo' ? 'bundled' : ''), latest: tag, available, error: '', custom: c.kind === 'ext' ? false : this.isCustom(id) });
         if (available) found.push(id);
       } catch (e) {
         this.set(id, { error: String(e.message || e).slice(0, 200) });
@@ -293,6 +421,16 @@ class Updater extends EventEmitter {
   }
 
   async expectedDigest(rel, assetName, sumName) {
+    if (!rel.assets) {
+      // API limit used up: the fixed download address, and only a checksum file published in the
+      // release (Xray: .dgst, geo files: .sha256sum). sing-box and mihomo publish none: try later.
+      const asset = { name: assetName, browser_download_url: downloadUrl(rel.repo, rel.tag_name, assetName) };
+      for (const sum of [...new Set([sumName, `${assetName}.dgst`, `${assetName}.sha256sum`].filter(Boolean))]) {
+        const digest = await this.publishedDigest(rel.repo, rel.tag_name, sum, assetName);
+        if (digest) return { asset, digest };
+      }
+      throw new Error('GITHUB_LIMIT');
+    }
     const asset = rel.assets.find((a) => a.name === assetName);
     if (!asset) throw new Error(`release has no ${assetName}`);
     const m = /^sha256:([0-9a-f]{64})$/.exec(asset.digest || '');
@@ -316,7 +454,7 @@ class Updater extends EventEmitter {
     this.aborts.set(id, ctrl);
     const signal = ctrl.signal;
     try {
-      const rel = await this.latestRelease(c.repo);
+      const rel = await this.releaseInfo(c.repo);
       if (c.kind === 'ext') {
         const got = [];
         for (let i = 0; i < c.files.length; i++) {
@@ -444,4 +582,4 @@ class Updater extends EventEmitter {
   }
 }
 
-module.exports = { mihomoInstalled, Updater, coreExe, geoDir, extInstalled, COMPONENTS, setElevated, allCoreExes, cleanupOldCores, protectedInstall, adminOnly, runRoot };
+module.exports = { tagFromReleaseUrl, tagsFromAtom, digestFromSumFile, downloadUrl, mihomoInstalled, Updater, coreExe, geoDir, extInstalled, COMPONENTS, setElevated, allCoreExes, cleanupOldCores, protectedInstall, adminOnly, runRoot };

@@ -267,6 +267,26 @@ function dnsConfig(settings, routing) {
   return dns;
 }
 
+const isServerName = (a) => typeof a === 'string' && a.includes('.') && /[a-z]/i.test(a) && /^[a-z0-9.-]{1,253}$/i.test(a);
+
+/**
+ * The servers' own names are looked up with this computer's DNS. Most outbounds dial through the
+ * system resolver anyway, but WireGuard asks Xray's DNS, whose remote (DoH) server is reached
+ * through that same WireGuard tunnel: the tunnel never came up ("connected", no traffic).
+ * Adds to the entry of an earlier call (a group / chain adds its other servers).
+ */
+function withServerDns(config, servers) {
+  const names = [...new Set((servers || []).filter(Boolean).map((s) => String(s.address || '').toLowerCase()).filter(isServerName))];
+  if (!config.dns || !Array.isArray(config.dns.servers) || !names.length) return config;
+  let entry = config.dns.servers.find((d) => d && d.tag === 'server-names');
+  if (!entry) {
+    entry = { tag: 'server-names', address: 'localhost', domains: [], skipFallback: true };
+    config.dns.servers.push(entry);
+  }
+  for (const n of names) if (!entry.domains.includes(`full:${n}`)) entry.domains.push(`full:${n}`);
+  return config;
+}
+
 /**
  * Custom hosts for tunneled traffic: a copy of the proxy outbound resolves these names itself
  * (with the hosts above) before sending, so the server connects to the chosen address.
@@ -340,6 +360,7 @@ function buildXrayConfig(server, settings, routing, { loopbackPort = 0, statsPor
     policy: { system: { statsOutboundUplink: false, statsOutboundDownlink: false } },
   };
   applyHostsRoute(config, settings);
+  withServerDns(config, [server]);
   return statsPort ? withXrayStats(config, statsPort) : config;
 }
 
@@ -388,4 +409,4 @@ function buildXrayTestConfig(servers, settings, basePort, { socks = false } = {}
   };
 }
 
-module.exports = { viaLoopback, loopbackInbound, withXrayStats, buildXrayConfig, buildXrayTestConfig, needsSingBox, hysteriaNeedsXray, needsLoopback, isUnencrypted, proxyOutbound, XRAY_PROTOCOLS, LOOPBACK_FINAL_RULE };
+module.exports = { viaLoopback, loopbackInbound, withXrayStats, withServerDns, buildXrayConfig, buildXrayTestConfig, needsSingBox, hysteriaNeedsXray, needsLoopback, isUnencrypted, proxyOutbound, XRAY_PROTOCOLS, LOOPBACK_FINAL_RULE };

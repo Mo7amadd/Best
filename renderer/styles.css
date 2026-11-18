@@ -471,7 +471,7 @@ html[dir="rtl"] .test-progress { padding: 8px 14px 8px 8px; }
 .upd-repo { font-size: 11.5px; color: var(--text-4); }
 .upd-ver { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
 .upd-ver b { font-size: 13px; font-weight: 500; }
-.upd-ver .chip { align-self: flex-start; margin-top: 2px; font-size: 11px; }
+.upd-ver .chip, .upd-ver .pill { align-self: flex-start; margin-top: 2px; font-size: 11px; } /* the size of its word, not the column */
 .upd-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 .upd-ok { display: inline-flex; align-items: center; gap: 6px; color: var(--good); font-size: 13px; }
 .upd-err { display: inline-flex; align-items: center; gap: 6px; color: var(--bad); font-size: 13px; }
@@ -481,6 +481,11 @@ html[dir="rtl"] .test-progress { padding: 8px 14px 8px 8px; }
 .upd-banner { display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 16px; border-radius: 14px; background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); font-size: 13px; }
 html[dir="rtl"] .upd-banner { padding: 10px 16px 10px 10px; }
 .upd-banner > .icon { color: var(--accent); }
+.beta-pill { margin-inline-start: 6px; padding: 0 7px; font-size: 10.5px; line-height: 17px; vertical-align: 2px; }
+/* a long version text never pushes the pin button out of the menu */
+.brand-text { min-width: 0; }
+.brand-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-toggle { flex-shrink: 0; }
 .main > .upd-banner { flex: none; margin: 0 24px 8px; }
 .upd-banner .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .badge.badge-accent { background: var(--accent); color: var(--accent-fg); font-weight: 600; }

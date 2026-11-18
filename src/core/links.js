@@ -773,6 +773,23 @@ function serverKey(s) {
   return [s.protocol, s.address, s.port, s.uuid || s.password || s.privateKey || '', s.network || '', s.path || s.serviceName || '', s.host || '', s.tls || ''].join('|');
 }
 
+// What describes a server's name, place or results, not how to connect to it.
+const NOT_CONNECTION = new Set(['id', 'subId', 'remark', 'delay', 'speed', 'udp', 'usageUp', 'usageDown']);
+const same = (x, y) => JSON.stringify(x === undefined ? null : x) === JSON.stringify(y === undefined ? null : y);
+/**
+ * True when two servers connect in exactly the same way (every setting: SNI, Reality keys, flow,
+ * fingerprint…), whatever their names. Test results of a server are only kept across a
+ * subscription update when this holds; serverKey() is looser and only keeps the server's place.
+ */
+function sameConnection(a, b) {
+  let x; let y;
+  try { x = normalizeServer({ ...a, id: 'x' }); y = normalizeServer({ ...b, id: 'x' }); } catch { return false; }
+  for (const k of new Set([...Object.keys(x), ...Object.keys(y)])) {
+    if (!NOT_CONNECTION.has(k) && !same(x[k], y[k])) return false;
+  }
+  return true;
+}
+
 /** Short human description of the transport, e.g. "WS + TLS". */
 function transportLabel(s) {
   if (s.protocol === 'custom') return s.core === 'sing-box' ? 'sing-box JSON' : 'Xray JSON';
@@ -789,5 +806,5 @@ function transportLabel(s) {
 
 module.exports = {
   PROTOCOLS, NETWORKS, SS_METHODS, SS_PLUGINS, VMESS_CIPHERS, FINGERPRINTS, FLOWS,
-  parseLink, normalizeServer, toLink, serverKey, transportLabel, splitUrl, customInboundPorts,
+  parseLink, normalizeServer, toLink, serverKey, sameConnection, transportLabel, splitUrl, customInboundPorts,
 };

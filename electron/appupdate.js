@@ -52,20 +52,28 @@ function assetName(version, portable) {
  */
 async function checkApp(updater, portable, beta = false) {
   if (!REPO_OK) return null;
-  let rel;
+  // Read from github.com, not its API (see updater.latestTag): no hourly limit to run into.
+  let tag;
   if (beta) {
-    // The newest of the recent releases and pre-releases (drafts are never public).
-    const list = (await updater.releases(REPO)).filter((r) => r && !r.draft && VERSION.test(String(r.tag_name).replace(/^v/, '')));
-    rel = list.reduce((best, r) => (!best || newer(r.tag_name, best.tag_name) ? r : best), null);
-    if (!rel) return { latest: '', available: false };
+    // The newest of the recent releases and pre-releases (drafts are never in the list).
+    const tags = (await updater.releaseTags(REPO)).filter((t) => VERSION.test(String(t).replace(/^v/, '')));
+    tag = tags.reduce((best, t) => (!best || newer(t, best) ? t : best), '');
+    if (!tag) return { latest: '', available: false };
   } else {
-    rel = await updater.latestRelease(REPO);
-    if (rel.prerelease || rel.draft) return { latest: '', available: false };
+    tag = await updater.latestTag(REPO); // GitHub's "latest" is never a pre-release or a draft
   }
-  const latest = String(rel.tag_name).replace(/^v/, '');
-  if (!VERSION.test(latest)) return { latest, available: false };
-  const asset = (rel.assets || []).find((a) => a.name === assetName(latest, portable));
-  const digest = asset && (/^sha256:([0-9a-f]{64})$/.exec(asset.digest || '') || [])[1];
+  const latest = String(tag).replace(/^v/, '');
+  if (!VERSION.test(latest) || (!beta && latest.includes('-'))) return { latest: beta ? latest : '', available: false };
+  const name = assetName(latest, portable);
+  // The checksum file published with the release (SHA256SUMS); releases before it: the API.
+  let digest = await updater.publishedDigest(REPO, `v${latest}`, 'SHA256SUMS', name);
+  let asset = { name, browser_download_url: `https://github.com/${REPO}/releases/download/v${latest}/${name}`, size: 0 };
+  if (!digest) {
+    const rel = await updater.releaseByTag(REPO, `v${latest}`).catch(() => null);
+    const a = rel && !rel.draft && (rel.assets || []).find((x) => x.name === name);
+    digest = (a && (/^sha256:([0-9a-f]{64})$/.exec(a.digest || '') || [])[1]) || '';
+    if (a) asset = a;
+  }
   const installed = app.getVersion();
   // A test version is installed and test versions are turned off: the official release may be
   // installed even though it is older ("back"), but only when the user asks for it.
@@ -76,7 +84,8 @@ async function checkApp(updater, portable, beta = false) {
 /** Download, verify and hand over to the installer / swap script. Resolves when Best should quit. */
 async function applyApp(updater, info, portable, onProgress, signal = null) {
   // The size GitHub lists for the file (at most 800 MB) is the limit; slow connections get 40 minutes.
-  const maxBytes = Math.min(Number(info.asset.size) || 0, 800 * 1024 * 1024) + 1024 * 1024;
+  // (Without the API the size is not known: then 800 MB.)
+  const maxBytes = Math.min(Number(info.asset.size) || 800 * 1024 * 1024, 800 * 1024 * 1024) + 1024 * 1024;
   const data = await updater.fetch(info.asset.browser_download_url, { binary: true, onProgress, maxBytes, timeoutMs: 40 * 60000, signal });
   if (signal && signal.aborted) throw new Error('CANCELLED');
   const hash = crypto.createHash('sha256').update(data).digest('hex');
