@@ -12,6 +12,8 @@ A fast, private proxy client for Windows, built on Xray, sing-box and (optionall
 - `Best-Setup-vX.Y.Z.exe`: installer for all users (Program Files)
 - `Best-vX.Y.Z-portable.zip`: portable copy (all data stays in its `data` folder)
 
+**Everything is included:** the Xray and sing-box cores come inside the installer and the portable copy, so there is nothing else to download. The optional mihomo core installs with one click on the *Updates* page.
+
 The SHA-256 of each file is shown next to it on the release page. Best checks it before it installs an update.
 
 ### What it does
@@ -37,7 +39,9 @@ Every common link and subscription, routing, and encrypted backups (to a file or
 
 To build it you need JDK 17, the Android SDK (platform 35) and Node.js 20 or newer. In the `android` folder, `node scripts/fetch-libs.mjs` and `node scripts/fetch-singbox.mjs` download the Xray library and sing-box (each checked by SHA-256), then `gradlew assembleDebug` builds the app.
 
-### Build from source
+### Build from source (developers only)
+
+Only needed if you want to change the code yourself. To use Best, just download it above.
 
 You need Windows 10 / 11 (64-bit), [Node.js](https://nodejs.org) 20 or newer and Git.
 
@@ -52,7 +56,7 @@ The core programs are not kept in the repository. Download them from their own r
 - [Xray-core](https://github.com/XTLS/Xray-core/releases) (`Xray-windows-64.zip`): copy `xray.exe`, `geoip.dat`, `geosite.dat` and `LICENSE` to `resources\cores\xray`
 - [sing-box](https://github.com/SagerNet/sing-box/releases) (`sing-box-…-windows-amd64.zip`): copy `sing-box.exe`, `libcronet.dll` and `LICENSE` to `resources\cores\sing-box`
 
-Best 1.0.0 ships Xray 26.11.9 and sing-box 1.14.4.
+Best 1.0.3 ships Xray 26.11.9 and sing-box 1.14.4.
 
 - `npm start` runs Best.
 - `npm test` runs the unit and fuzz tests. `npm run test:ui`, `test:perf` and `test:soak` drive the app itself.
@@ -75,6 +79,8 @@ Best is free software under the [GNU General Public License v3.0 or later](LICEN
 
 - `Best-Setup-vX.Y.Z.exe`: установка для всех пользователей (в Program Files)
 - `Best-vX.Y.Z-portable.zip`: портативная версия (все данные хранятся в папке `data` рядом с программой)
+
+**Всё уже внутри:** ядра Xray и sing-box входят в установщик и портативную версию, больше ничего скачивать не нужно. Дополнительное ядро mihomo ставится в один клик на странице *Обновления*.
 
 Контрольная сумма SHA-256 каждого файла указана на странице релиза. Best проверяет её перед установкой обновления.
 
@@ -101,7 +107,9 @@ Best для Android (7.0 и новее) сейчас тестируется. Е�
 
 Для сборки нужны JDK 17, Android SDK (платформа 35) и Node.js 20 или новее. В папке `android` команды `node scripts/fetch-libs.mjs` и `node scripts/fetch-singbox.mjs` скачивают библиотеку Xray и sing-box (каждый файл проверяется по SHA-256), затем `gradlew assembleDebug` собирает приложение.
 
-### Сборка из исходного кода
+### Сборка из исходного кода (только для разработчиков)
+
+Это нужно, только если вы хотите сами менять код. Чтобы пользоваться Best, просто скачайте его выше.
 
 Нужны Windows 10 / 11 (64-бит), [Node.js](https://nodejs.org) 20 или новее и Git.
 
@@ -116,7 +124,7 @@ npm install
 - [Xray-core](https://github.com/XTLS/Xray-core/releases) (`Xray-windows-64.zip`): скопируйте `xray.exe`, `geoip.dat`, `geosite.dat` и `LICENSE` в `resources\cores\xray`
 - [sing-box](https://github.com/SagerNet/sing-box/releases) (`sing-box-…-windows-amd64.zip`): скопируйте `sing-box.exe`, `libcronet.dll` и `LICENSE` в `resources\cores\sing-box`
 
-В Best 1.0.0 входят Xray 26.11.9 и sing-box 1.14.4.
+В Best 1.0.3 входят Xray 26.11.9 и sing-box 1.14.4.
 
 - `npm start` запускает Best.
 - `npm test` запускает модульные и фазз-тесты. `npm run test:ui`, `test:perf` и `test:soak` проверяют само приложение.
@@ -141,6 +149,8 @@ Best — свободная программа под лицензией [GNU Ge
 
 - نصب برای همه‌ی کاربرها (در Program Files): <code dir="ltr">Best-Setup-vX.Y.Z.exe</code>
 - نسخه‌ی پرتابل، همه‌ی داده‌ها کنار خود برنامه در پوشه‌ی <code dir="ltr">data</code> می‌ماند: <code dir="ltr">Best-vX.Y.Z-portable.zip</code>
+
+**همه‌چیز همراه برنامه است:** هسته‌های Xray و sing-box داخل نصب‌کننده و نسخه‌ی پرتابل هستند و لازم نیست چیز دیگری دانلود کنید. هسته‌ی اختیاری mihomo هم با یک کلیک در صفحه‌ی *به‌روزرسانی* نصب می‌شود.
 
 هش SHA-256 هر فایل در صفحه‌ی نسخه کنار آن آمده است و Best پیش از نصب هر به‌روزرسانی آن را بررسی می‌کند.
 
@@ -167,7 +177,9 @@ Best — свободная программа под лицензией [GNU Ge
 
 برای ساختن آن JDK 17، Android SDK (پلتفرم ۳۵) و Node.js نسخه‌ی ۲۰ یا بالاتر لازم است. در پوشه‌ی <code dir="ltr">android</code>، دستورهای <code dir="ltr">node scripts/fetch-libs.mjs</code> و <code dir="ltr">node scripts/fetch-singbox.mjs</code> کتابخانه‌ی Xray و sing-box را دانلود می‌کنند (هر کدام با SHA-256 بررسی می‌شود) و بعد <code dir="ltr">gradlew assembleDebug</code> برنامه را می‌سازد.
 
-### ساخت از روی کد
+### ساخت از روی کد (فقط برای برنامه‌نویس‌ها)
+
+فقط وقتی لازم است که بخواهید خودتان کد را تغییر دهید. برای استفاده از Best کافی است آن را از بالا دانلود کنید.
 
 ویندوز ۱۰ یا ۱۱ (۶۴ بیتی)، [Node.js](https://nodejs.org) نسخه‌ی ۲۰ یا بالاتر و Git لازم است.
 
@@ -186,7 +198,7 @@ npm install
 - از [Xray-core](https://github.com/XTLS/Xray-core/releases) فایل <code dir="ltr">Xray-windows-64.zip</code>: فایل‌های <code dir="ltr">xray.exe</code>، <code dir="ltr">geoip.dat</code>، <code dir="ltr">geosite.dat</code> و <code dir="ltr">LICENSE</code> را در <code dir="ltr">resources\cores\xray</code> بگذارید.
 - از [sing-box](https://github.com/SagerNet/sing-box/releases) فایل <code dir="ltr">sing-box-…-windows-amd64.zip</code>: فایل‌های <code dir="ltr">sing-box.exe</code>، <code dir="ltr">libcronet.dll</code> و <code dir="ltr">LICENSE</code> را در <code dir="ltr">resources\cores\sing-box</code> بگذارید.
 
-نسخه‌ی 1.0.0 برنامه با Xray 26.11.9 و sing-box 1.14.4 منتشر شده است.
+نسخه‌ی 1.0.3 برنامه با Xray 26.11.9 و sing-box 1.14.4 منتشر شده است.
 
 - دستور <code dir="ltr">npm start</code> برنامه را اجرا می‌کند.
 - دستور <code dir="ltr">npm test</code> تست‌های واحد و تست‌های بازی (fuzz) را اجرا می‌کند. دستورهای <code dir="ltr">npm run test:ui</code>، <code dir="ltr">test:perf</code> و <code dir="ltr">test:soak</code> خود برنامه را آزمایش می‌کنند.
@@ -211,6 +223,8 @@ Best 是一款快速、注重隐私的 Windows 代理客户端，基于 Xray 和
 
 - `Best-Setup-vX.Y.Z.exe`：为所有用户安装（Program Files）
 - `Best-vX.Y.Z-portable.zip`：便携版（所有数据都保存在它的 `data` 文件夹中）
+
+**一切都已包含：** 安装程序和便携版已内置 Xray 和 sing-box 内核，无需另外下载。可选的 mihomo 内核可在“更新”页面一键安装。
 
 每个文件的 SHA-256 校验值显示在发布页面上，Best 在安装更新前会先校验。
 
@@ -237,7 +251,9 @@ Best for Android（Android 7.0 及以上）正在测试中。它的版本标签�
 
 构建需要 JDK 17、Android SDK（平台 35）和 Node.js 20 或更新版本。在 `android` 文件夹中，`node scripts/fetch-libs.mjs` 和 `node scripts/fetch-singbox.mjs` 会下载 Xray 库和 sing-box（每个都经过 SHA-256 校验），然后 `gradlew assembleDebug` 构建应用。
 
-### 从源代码构建
+### 从源代码构建（仅限开发者）
+
+只有在您想自己修改代码时才需要。如果只是使用 Best，直接从上面下载即可。
 
 需要 Windows 10 / 11（64 位）、[Node.js](https://nodejs.org) 20 或更新版本以及 Git。
 
@@ -252,7 +268,7 @@ npm install
 - [Xray-core](https://github.com/XTLS/Xray-core/releases)（`Xray-windows-64.zip`）：将 `xray.exe`、`geoip.dat`、`geosite.dat` 和 `LICENSE` 复制到 `resources\cores\xray`
 - [sing-box](https://github.com/SagerNet/sing-box/releases)（`sing-box-…-windows-amd64.zip`）：将 `sing-box.exe`、`libcronet.dll` 和 `LICENSE` 复制到 `resources\cores\sing-box`
 
-Best 1.0.0 附带 Xray 26.11.9 和 sing-box 1.14.4。
+Best 1.0.3 附带 Xray 26.11.9 和 sing-box 1.14.4。
 
 - `npm start` 运行 Best。
 - `npm test` 运行单元测试和模糊测试。`npm run test:ui`、`test:perf` 和 `test:soak` 对应用本身进行测试。
