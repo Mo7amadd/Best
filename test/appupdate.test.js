@@ -89,6 +89,24 @@ test('with a SHA256SUMS file in the release, no API request at all', { skip: !RE
   assert.deepStrictEqual(f.api, [], 'the API was asked');
 });
 
+test('nothing newer: the checksum file is not even fetched', { skip: !REPO_OK }, async () => {
+  installed = '1.0.3';
+  let sums = 0;
+  const f = fake(rel('1.0.3'), [rel('1.0.3')]);
+  f.publishedDigest = async () => { sums++; return ''; };
+  for (const beta of [false, true]) {
+    const r = await checkApp(f, false, beta);
+    assert.deepStrictEqual([r.latest, r.available], ['1.0.3', false]);
+  }
+  assert.strictEqual(sums, 0, 'SHA256SUMS was fetched although nothing is newer');
+  assert.deepStrictEqual(f.api, [], 'the API was asked');
+  // with a newer version it is fetched (once)
+  const g = fake(rel('1.0.4'), []);
+  g.publishedDigest = async () => { sums++; return 'c'.repeat(64); };
+  assert.strictEqual((await checkApp(g, false, false)).available, true);
+  assert.strictEqual(sums, 1);
+});
+
 test('a release without a checksum is not offered', { skip: !REPO_OK }, async () => {
   installed = '1.0.2';
   const r = await checkApp(fake(rel('1.0.3', { assets: [{ ...asset('1.0.3'), digest: '' }] }), []), false, false);
