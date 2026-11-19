@@ -7,6 +7,7 @@ const {
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const crypto = require('crypto');
 const net = require('net');
 const { execFile, spawn } = require('child_process');
@@ -29,6 +30,7 @@ const { Updater, extInstalled, mihomoInstalled, setElevated, cleanupOldCores, pr
 const trayI18n = require('./tray-i18n');
 const { normalizeServer, toLink, serverKey, sameConnection, transportLabel, customInboundPorts, parseLink } = require('../src/core/links');
 const { parseContent, parseUserInfo, splitInfoNodes } = require('../src/core/subscription');
+const hwid = require('../src/core/hwid');
 const { sanitizeSettings, sanitizeRouting, DEFAULT_ROUTING } = require('../src/core/settings');
 const { effectiveRouting, importRules, exportRules, profileFromPanelRouting } = require('../src/core/routing');
 const { needsSingBox, isUnencrypted, hysteriaNeedsXray } = require('../src/core/xray-config');
@@ -791,6 +793,19 @@ function guardHttpsOnly(ses) {
   });
 }
 
+/**
+ * This computer's secret for the device id sent to panels (src/core/hwid.js). Its own encrypted
+ * file, never part of a backup: restored on another computer it would make two devices one.
+ */
+let deviceSecret = '';
+function getDeviceSecret() {
+  if (hwid.validSecret(deviceSecret)) return deviceSecret;
+  const stored = readJson('device.dat', null);
+  if (stored && hwid.validSecret(stored.secret)) deviceSecret = stored.secret;
+  else { deviceSecret = hwid.newSecret(); writeJson('device.dat', { secret: deviceSecret }, { encrypt: true }); }
+  return deviceSecret;
+}
+
 async function fetchTextNow(url, { userAgent, viaProxy }) {
   const ses = session.fromPartition('best-net');
   await ses.setProxy(viaProxy ? { proxyRules: `http=127.0.0.1:${settings.httpPort};https=127.0.0.1:${settings.httpPort}` } : { mode: 'direct' });
@@ -802,14 +817,19 @@ async function fetchTextNow(url, { userAgent, viaProxy }) {
   let res;
   try {
     res = await ses.fetch(url, {
-      headers: { 'User-Agent': userAgent || settings.subUserAgent || BEST_UA, Accept: '*/*' },
+      headers: {
+        'User-Agent': userAgent || settings.subUserAgent || BEST_UA, Accept: '*/*',
+        ...hwid.hwidHeaders({ enabled: settings.subHwid, secret: settings.subHwid ? getDeviceSecret() : '', url, osVersion: os.release(), model: settings.subHwidName }),
+      },
       redirect: 'follow', credentials: 'omit', cache: 'no-store', signal: AbortSignal.timeout(25000),
     });
   } catch (e) {
     if (httpsOnlyFetch && downgradeBlocked) throw new Error('INSECURE_REDIRECT');
     throw e;
   } finally { httpsOnlyFetch = false; downgradeBlocked = false; }
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  // A panel that limits devices says why it refused (Remnawave: 404 without an id).
+  const device = hwid.hwidStatus((n) => res.headers.get(n));
+  if (!res.ok) throw new Error(device === 'limit' ? 'HWID_LIMIT' : device === 'required' ? 'HWID_REQUIRED' : `HTTP ${res.status}`);
   const reader = res.body.getReader();
   const chunks = [];
   let size = 0;
@@ -830,6 +850,7 @@ async function fetchTextNow(url, { userAgent, viaProxy }) {
     webPageUrl: safeWebUrl(hdr('profile-web-page-url')),
     announce: decodeProfileTitle(hdr('announce'), 500),
     routing: hdr('routing-enable').toLowerCase() === 'false' ? '' : hdr('routing'),
+    device,
   };
 }
 
@@ -940,9 +961,10 @@ async function updateSub(sub) {
   }
   sub.notice = '';
   if (!real.length && parsed.errors.length === 0 && !info.length) {
-    sub.error = 'EMPTY';
+    // An empty answer with the panel's device-limit flag: say that, not "empty".
+    sub.error = result.device === 'limit' ? 'HWID_LIMIT' : result.device === 'required' ? 'HWID_REQUIRED' : 'EMPTY';
     saveSubs();
-    throw new Error('EMPTY');
+    throw new Error(sub.error);
   }
   // Replace this subscription's servers. The same server keeps its id (and so the selection) and its
   // usage; its test results stay only when nothing but the name changed (a new SNI or Reality key

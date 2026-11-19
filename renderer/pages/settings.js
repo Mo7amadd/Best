@@ -364,6 +364,8 @@ export function renderSettings() {
   const subsTests = card(t('sec_subsTests'), 'refresh',
     field(t('subUserAgent'), commitInput('subUserAgent', { placeholder: `Best/${S.version}` }), { help: t('subUserAgent_help') }),
     switchRow('subViaProxy', t('subViaProxy')),
+    switchRow('subHwid', t('subHwid'), t('subHwid_d')),
+    st.subHwid ? field(t('subHwidName'), commitInput('subHwidName', { placeholder: 'Windows PC' }), { help: t('subHwidName_help') }) : null,
     field(t('subAutoUpdateHours'), commitInput('subAutoUpdateHours', { type: 'number', min: 0, max: 720 })),
     field(t('testUrl'), commitInput('testUrl')),
     field(t('speedTestUrl'), commitInput('speedTestUrl')),
