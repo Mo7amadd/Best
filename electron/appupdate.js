@@ -64,6 +64,12 @@ async function checkApp(updater, portable, beta = false) {
   }
   const latest = String(tag).replace(/^v/, '');
   if (!VERSION.test(latest) || (!beta && latest.includes('-'))) return { latest: beta ? latest : '', available: false };
+  const installed = app.getVersion();
+  // A test version is installed and test versions are turned off: the official release may be
+  // installed even though it is older ("back"), but only when the user asks for it.
+  const back = !beta && installed.includes('-') && !latest.includes('-') && compareVersions(latest, installed) < 0;
+  // Nothing to install: no need to fetch the checksum (one request less on every check).
+  if (!newer(latest, installed) && !back) return { latest, available: false, back: false };
   const name = assetName(latest, portable);
   // The checksum file published with the release (SHA256SUMS); releases before it: the API.
   let digest = await updater.publishedDigest(REPO, `v${latest}`, 'SHA256SUMS', name);
@@ -74,10 +80,6 @@ async function checkApp(updater, portable, beta = false) {
     digest = (a && (/^sha256:([0-9a-f]{64})$/.exec(a.digest || '') || [])[1]) || '';
     if (a) asset = a;
   }
-  const installed = app.getVersion();
-  // A test version is installed and test versions are turned off: the official release may be
-  // installed even though it is older ("back"), but only when the user asks for it.
-  const back = !beta && installed.includes('-') && !latest.includes('-') && compareVersions(latest, installed) < 0;
   return { latest, available: (newer(latest, installed) || back) && Boolean(asset && digest), back, asset, digest };
 }
 

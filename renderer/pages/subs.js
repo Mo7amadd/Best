@@ -5,6 +5,10 @@ import { t, num, locale } from '../i18n.js';
 import { S, ui, api, run, render, formatBytes, go, localSet } from '../app.js';
 import { subLinks, subNotices } from './servers.js';
 
+// Codes the main process gives for a failed subscription, in the user's language (else as sent).
+const SUB_ERRORS = ['FILTER_EMPTY', 'HWID_LIMIT', 'HWID_REQUIRED', 'INSECURE_REDIRECT'];
+const subError = (e) => (e === 'EMPTY' ? t('emptySub') : SUB_ERRORS.includes(e) ? t(e) : e);
+
 export function openSubEditor(id) {
   const existing = id ? S.subs.find((s) => s.id === id) : null;
   const draft = existing
@@ -43,7 +47,7 @@ export function openSubEditor(id) {
         const [r] = await api.updateSubs([newId]);
         const sub = S.subs.find((s) => s.id === newId) || draft;
         if (r && r.ok) toast(t('t_subUpdated', { name: sub.name, n: num(r.count) }), 'success');
-        else if (r) toast(t('t_subFailed', { name: sub.name, e: r.error }), 'error', 7000);
+        else if (r) toast(t('t_subFailed', { name: sub.name, e: subError(r.error) }), 'error', 7000);
         ui.group = newId;
         localSet('group', newId);
         go('servers');
@@ -76,7 +80,7 @@ async function updateOne(sub, btn) {
   const [r] = (await run(() => api.updateSubs([sub.id]))) || [];
   btn.disabled = false;
   if (r && r.ok) toast(t('t_subUpdated', { name: sub.name, n: num(r.count) }), 'success');
-  else if (r) toast(t('t_subFailed', { name: sub.name, e: r.error }), 'error', 7000);
+  else if (r) toast(t('t_subFailed', { name: sub.name, e: subError(r.error) }), 'error', 7000);
 }
 
 function subCard(sub) {
@@ -106,7 +110,7 @@ function subCard(sub) {
     i.total
       ? h('div', { class: 'usage-bar', style: { width: '100%' } }, h('span', { style: { width: `${Math.min(100, (used / i.total) * 100)}%` } }))
       : h('div', { class: 'usage-bar unlimited', style: { width: '100%' }, title: t('unlimited') }, h('span')),
-    sub.error ? h('div', { class: 'sub-err' }, sub.error === 'EMPTY' ? t('emptySub') : sub.error) : null,
+    sub.error ? h('div', { class: 'sub-err' }, subError(sub.error)) : null,
     subNotices(sub),
     sub.supportUrl || sub.webPageUrl ? h('div', { class: 'row' }, subLinks(sub)) : null,
     h('div', { class: 'sub-actions' },
@@ -130,7 +134,7 @@ export function renderSubs() {
             for (const r of res || []) {
               const sub = S.subs.find((s) => s.id === r.id) || { name: '' };
               if (r.ok) toast(t('t_subUpdated', { name: sub.name, n: num(r.count) }), 'success');
-              else toast(t('t_subFailed', { name: sub.name, e: r.error }), 'error', 7000);
+              else toast(t('t_subFailed', { name: sub.name, e: subError(r.error) }), 'error', 7000);
             }
           },
         }, icon('refresh', 16), h('span', null, t('subs_updateAll'))),

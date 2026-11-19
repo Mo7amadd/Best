@@ -69,6 +69,8 @@ const DEFAULT_SETTINGS = Object.freeze({
   udpTestTarget: 'pool.ntp.org:123', // NTP server asked during the UDP test
   subUserAgent: '', // empty = "Best/<version>" (see main.js)
   subViaProxy: true,
+  subHwid: true, // send a device id to panels that limit devices (see src/core/hwid.js)
+  subHwidName: '', // device name shown in the panel; empty = "Windows PC"
   subAutoUpdateHours: 0,
   testUrl: 'https://www.gstatic.com/generate_204',
   speedTestUrl: 'https://speed.cloudflare.com/__down?bytes=25000000',
@@ -133,7 +135,7 @@ function sanitizeSettings(input) {
   for (const [k, list] of Object.entries(ENUMS)) {
     if (list.includes(src[k])) out[k] = src[k];
   }
-  for (const k of ['allowLan', 'sniffing', 'mux', 'fragment', 'tunStrictRoute', 'tunIpv6', 'autoStart', 'startMinimized', 'autoConnect', 'closeToTray', 'globalHotkey', 'autoCheckUpdates', 'betaUpdates', 'subViaProxy', 'tun', 'statsEnabled', 'showExitIp', 'useSystemHosts', 'dnsIpv4Only', 'tunFakeIp', 'logToFile', 'sbMux', 'sbMuxPadding', 'sidebarCollapsed']) {
+  for (const k of ['allowLan', 'sniffing', 'mux', 'fragment', 'tunStrictRoute', 'tunIpv6', 'autoStart', 'startMinimized', 'autoConnect', 'closeToTray', 'globalHotkey', 'autoCheckUpdates', 'betaUpdates', 'subViaProxy', 'subHwid', 'tun', 'statsEnabled', 'showExitIp', 'useSystemHosts', 'dnsIpv4Only', 'tunFakeIp', 'logToFile', 'sbMux', 'sbMuxPadding', 'sidebarCollapsed']) {
     if (typeof src[k] === 'boolean') out[k] = src[k];
   }
   out.socksPort = int(src.socksPort, 1025, 65535, d.socksPort);
@@ -157,6 +159,7 @@ function sanitizeSettings(input) {
   out.proxyBypass = /^[A-Za-z0-9.*;:<>_\-[\]]*$/.test(bypass) ? bypass : d.proxyBypass;
   // The old default (a v2rayN name) becomes automatic again; a name the user typed is kept.
   out.subUserAgent = String(src.subUserAgent || '') === 'v2rayN/7.15.0' ? '' : cleanText(src.subUserAgent ?? d.subUserAgent, 128);
+  out.subHwidName = cleanText(src.subHwidName ?? d.subHwidName, 40).replace(/[^\x20-\x7e]/g, '').replace(/\s+/g, ' ').trim();
   out.subAutoUpdateHours = int(src.subAutoUpdateHours, 0, 720, 0);
   out.testUrl = httpUrl(src.testUrl, d.testUrl);
   out.speedTestUrl = httpUrl(src.speedTestUrl, d.speedTestUrl);

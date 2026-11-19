@@ -56,7 +56,7 @@ The core programs are not kept in the repository. Download them from their own r
 - [Xray-core](https://github.com/XTLS/Xray-core/releases) (`Xray-windows-64.zip`): copy `xray.exe`, `geoip.dat`, `geosite.dat` and `LICENSE` to `resources\cores\xray`
 - [sing-box](https://github.com/SagerNet/sing-box/releases) (`sing-box-…-windows-amd64.zip`): copy `sing-box.exe`, `libcronet.dll` and `LICENSE` to `resources\cores\sing-box`
 
-Best 1.0.3 ships Xray 26.11.9 and sing-box 1.14.4.
+Best 1.0.4 ships Xray 26.11.9 and sing-box 1.14.4.
 
 - `npm start` runs Best.
 - `npm test` runs the unit and fuzz tests. `npm run test:ui`, `test:perf` and `test:soak` drive the app itself.
@@ -124,7 +124,7 @@ npm install
 - [Xray-core](https://github.com/XTLS/Xray-core/releases) (`Xray-windows-64.zip`): скопируйте `xray.exe`, `geoip.dat`, `geosite.dat` и `LICENSE` в `resources\cores\xray`
 - [sing-box](https://github.com/SagerNet/sing-box/releases) (`sing-box-…-windows-amd64.zip`): скопируйте `sing-box.exe`, `libcronet.dll` и `LICENSE` в `resources\cores\sing-box`
 
-В Best 1.0.3 входят Xray 26.11.9 и sing-box 1.14.4.
+В Best 1.0.4 входят Xray 26.11.9 и sing-box 1.14.4.
 
 - `npm start` запускает Best.
 - `npm test` запускает модульные и фазз-тесты. `npm run test:ui`, `test:perf` и `test:soak` проверяют само приложение.
@@ -198,7 +198,7 @@ npm install
 - از [Xray-core](https://github.com/XTLS/Xray-core/releases) فایل <code dir="ltr">Xray-windows-64.zip</code>: فایل‌های <code dir="ltr">xray.exe</code>، <code dir="ltr">geoip.dat</code>، <code dir="ltr">geosite.dat</code> و <code dir="ltr">LICENSE</code> را در <code dir="ltr">resources\cores\xray</code> بگذارید.
 - از [sing-box](https://github.com/SagerNet/sing-box/releases) فایل <code dir="ltr">sing-box-…-windows-amd64.zip</code>: فایل‌های <code dir="ltr">sing-box.exe</code>، <code dir="ltr">libcronet.dll</code> و <code dir="ltr">LICENSE</code> را در <code dir="ltr">resources\cores\sing-box</code> بگذارید.
 
-نسخه‌ی 1.0.3 برنامه با Xray 26.11.9 و sing-box 1.14.4 منتشر شده است.
+نسخه‌ی 1.0.4 برنامه با Xray 26.11.9 و sing-box 1.14.4 منتشر شده است.
 
 - دستور <code dir="ltr">npm start</code> برنامه را اجرا می‌کند.
 - دستور <code dir="ltr">npm test</code> تست‌های واحد و تست‌های بازی (fuzz) را اجرا می‌کند. دستورهای <code dir="ltr">npm run test:ui</code>، <code dir="ltr">test:perf</code> و <code dir="ltr">test:soak</code> خود برنامه را آزمایش می‌کنند.
@@ -268,7 +268,7 @@ npm install
 - [Xray-core](https://github.com/XTLS/Xray-core/releases)（`Xray-windows-64.zip`）：将 `xray.exe`、`geoip.dat`、`geosite.dat` 和 `LICENSE` 复制到 `resources\cores\xray`
 - [sing-box](https://github.com/SagerNet/sing-box/releases)（`sing-box-…-windows-amd64.zip`）：将 `sing-box.exe`、`libcronet.dll` 和 `LICENSE` 复制到 `resources\cores\sing-box`
 
-Best 1.0.3 附带 Xray 26.11.9 和 sing-box 1.14.4。
+Best 1.0.4 附带 Xray 26.11.9 和 sing-box 1.14.4。
 
 - `npm start` 运行 Best。
 - `npm test` 运行单元测试和模糊测试。`npm run test:ui`、`test:perf` 和 `test:soak` 对应用本身进行测试。

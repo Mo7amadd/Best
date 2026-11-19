@@ -49,8 +49,7 @@ function connectionCard() {
       type: 'button', class: 'tun-btn', role: 'switch', 'aria-checked': String(st.tun), 'aria-labelledby': 'tun-label',
       disabled: !S.isAdmin,
       onClick: () => run(() => api.setSettings({ tun: !st.tun })),
-    }, h('span', { class: 'switch', 'aria-hidden': 'true', 'aria-checked': String(st.tun) }, h('span', { class: 'switch-knob' })), st.tun ? t('on') : t('off')),
-    !S.isAdmin ? h('button', { type: 'button', class: 'link-btn', onClick: () => api.relaunchAdmin() }, t('runAsAdmin')) : null);
+    }, h('span', { class: 'switch', 'aria-hidden': 'true', 'aria-checked': String(st.tun) }, h('span', { class: 'switch-knob' })), st.tun ? t('on') : t('off')));
 
   return h('section', { class: `card conn conn-nopower ${engaged ? 'engaged' : ''}`, 'aria-label': t('connect') },
     h('div', { class: 'conn-info' },
@@ -58,23 +57,29 @@ function connectionCard() {
       h('div', { class: 'conn-name' },
         h('span', { class: 'name' }, active ? serverName(active) : t('noServerSelected')),
         active && active.delay > 0 ? h('span', { class: 'ms' }, `${num(active.delay)} ${t('ms')}`) : null),
+      // the speed / exit IP line sits next to the tags when there is room (wraps below otherwise)
+      h('div', { class: 'conn-meta' },
       h('div', { class: 'conn-tags' }, tags),
       running && st.statsEnabled !== false ? h('div', { class: 'conn-stats', 'aria-live': 'off' },
         h('span', { class: 'rate down', title: t('download') }, icon('down', 14), h('b', { id: 'st-down', class: 'mono' }, ui.stats ? formatRate(ui.stats.downSpeed) : '—')),
         h('span', { class: 'rate up', title: t('upload') }, icon('up', 14), h('b', { id: 'st-up', class: 'mono' }, ui.stats ? formatRate(ui.stats.upSpeed) : '—')),
         h('span', { id: 'st-session', class: 'dim' }, ui.stats ? t('st_session', { down: formatBytes(ui.stats.down), up: formatBytes(ui.stats.up) }) : ''),
         exitIpChip(),
-        active && (active.usageDown || active.usageUp) ? h('span', { class: 'dim', title: t('st_serverTotal_help') }, t('st_serverTotal', { n: formatBytes((active.usageDown || 0) + (active.usageUp || 0)) })) : null) : null),
+        active && (active.usageDown || active.usageUp) ? h('span', { class: 'dim', title: t('st_serverTotal_help') }, t('st_serverTotal', { n: formatBytes((active.usageDown || 0) + (active.usageUp || 0)) })) : null) : null)),
     h('div', { class: 'conn-controls' },
       h('div', { class: 'ctl ctl-proxy' },
         h('span', { class: 'section-label', id: 'proxy-label' }, t('systemProxy')),
-        segmented(['off', 'on', 'pac', 'keep'].map((m) => ({ value: m, label: t(`proxy_${m}`) })), st.proxyMode, (m) => run(() => api.setProxyMode(m)), { label: t('systemProxy') }),
-        h('span', { class: 'help' }, help)),
+        segmented(['off', 'on', 'pac', 'keep'].map((m) => ({ value: m, label: t(`proxy_${m}`) })), st.proxyMode, (m) => run(() => api.setProxyMode(m)), { label: t('systemProxy') })),
       h('div', { class: 'ctl ctl-routing' },
         h('span', { class: 'section-label', id: 'routing-cap' }, t('routing')),
         select(S.routing.profiles.map((p) => ({ value: p.id, label: `${profileName(p)}${p.base === 'bypass-local' && S.routing.country ? ` ${flagOf(S.routing.country)}` : ''}` })),
           S.routing.activeId, (v) => run(() => api.setRouting({ activeId: v })), { id: 'routing-sel', 'aria-labelledby': 'routing-cap' })),
-      tunCtl));
+      tunCtl,
+      // One line under all three controls (wraps only in a narrow window): what the proxy mode
+      // means, and the way to TUN.
+      h('div', { class: 'conn-notes' },
+        h('span', { class: 'help' }, help),
+        !S.isAdmin ? h('button', { type: 'button', class: 'link-btn', onClick: () => api.relaunchAdmin() }, t('runAsAdmin')) : null)));
 }
 
 /** "Exit IP 🇩🇪 1.2.3.4": the address websites see (checked through the tunnel after connecting). */

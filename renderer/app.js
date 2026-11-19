@@ -248,7 +248,7 @@ function sidebar() {
     // The logo opens Best's page on GitHub (code, releases).
     h('button', { type: 'button', class: 'brand-logo', title: t('openGithub'), 'aria-label': t('openGithub'), onClick: () => api.openProject() }, h('img', { src: 'logo.png', alt: '' })),
     // a test version: the mark goes next to the name (room there); the number alone below it
-    h('div', { class: 'brand-text' }, h('div', { class: 'brand-name' }, 'Best', isBeta(S.version) ? h('span', { class: 'pill soft beta-pill' }, t('upd_betaBadge')) : null), h('div', { class: 'brand-sub' }, isBeta(S.version) ? S.version : `${t('version')} ${S.version}`)),
+    h('div', { class: 'brand-text' }, h('div', { class: 'brand-name' }, 'Best', isBeta(S.version) ? h('span', { class: 'pill soft beta-pill' }, t('upd_betaBadge')) : null), h('div', { class: 'brand-sub' }, isBeta(S.version) ? h('bdi', { dir: 'ltr' }, S.version) : `${t('version')} ${S.version}`)), // "1.0.4-beta.3" stays in order in RTL
     pin),
   h('nav', { class: 'nav', 'aria-label': 'Main' },
     NAV.map(nav),

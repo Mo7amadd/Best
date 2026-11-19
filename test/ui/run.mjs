@@ -242,6 +242,31 @@ try {
     await ev(`[...document.querySelectorAll('aside .nav-btn')][0].click()`); await wait(300);
   });
 
+  await check('theme "follow Windows": the window buttons change colour with Windows light / dark', async () => {
+    await setSettings({ theme: 'system' });
+    const target = (await (await fetch(`http://127.0.0.1:${mainPort}/json`)).json())[0];
+    const mws = new WebSocket(target.webSocketDebuggerUrl);
+    await new Promise((r, j) => { mws.addEventListener('open', r); mws.addEventListener('error', j); });
+    let mid = 0;
+    const inMain = (expression) => new Promise((r) => { const n = ++mid; const on = (m) => { const msg = JSON.parse(m.data); if (msg.id === n) { mws.removeEventListener('message', on); r(msg.result && msg.result.result && msg.result.result.value); } }; mws.addEventListener('message', on); mws.send(JSON.stringify({ id: n, method: 'Runtime.evaluate', params: { expression, includeCommandLineAPI: true, returnByValue: true } })); });
+    const win = "require('electron').BrowserWindow.getAllWindows().find((w) => /index/.test(w.webContents.getURL()))";
+    try {
+      // record what the window buttons are given, then let "Windows" switch (Electron's nativeTheme)
+      await inMain(`(() => { const w = ${win}; const set = w.setTitleBarOverlay.bind(w); globalThis.__overlay = []; w.setTitleBarOverlay = (o) => { globalThis.__overlay.push(o.color + '/' + o.symbolColor); return set(o); }; })()`);
+      await inMain(`require('electron').nativeTheme.themeSource = 'light'`); await wait(500);
+      await inMain(`require('electron').nativeTheme.themeSource = 'dark'`); await wait(500);
+      const seen = await inMain('globalThis.__overlay');
+      assert(Array.isArray(seen) && seen.length >= 2, `window buttons not updated: ${JSON.stringify(seen)}`);
+      assert(/^#F5F6F8\//i.test(seen[0]) && !/^#F5F6F8\//i.test(seen[seen.length - 1]), `wrong colours: ${JSON.stringify(seen)}`);
+      // the page itself follows too
+      assert(await ev(`document.documentElement.dataset.theme === 'dark' || getComputedStyle(document.body).backgroundColor !== 'rgb(245, 246, 248)'`), 'page did not turn dark');
+    } finally {
+      await inMain(`require('electron').nativeTheme.themeSource = 'system'`).catch(() => {});
+      mws.close();
+      await setSettings({ theme: 'dark' });
+    }
+  });
+
   await check('side menu: pinning animates the page width (no jump) and is remembered', async () => {
     const [rx] = await center('.brand img');
     await move(rx, 300); await wait(450);
