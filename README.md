@@ -20,6 +20,7 @@ The SHA-256 of each file is shown next to it on the release page. Best checks it
 
 - **Three cores, chosen for you.** Xray, sing-box and (optionally) mihomo. For each server, Best picks a core that can actually run it.
 - **Every common link and subscription.** VLESS (REALITY, XHTTP, Vision, VLESS Encryption), VMess, Trojan, Shadowsocks (including 2022), Hysteria2, TUIC, WireGuard, AnyTLS, Naive, SOCKS and HTTP. Subscriptions can be plain links, base64, Clash / mihomo YAML or Xray JSON.
+- **Subscriptions with a device limit.** Panels such as 3x-ui and Remnawave can limit how many devices use one subscription; Best sends the device ID (HWID) they ask for. It is made up and different for each panel, not your hardware ID, and your computer's name is not sent.
 - **System proxy or TUN.** In TUN mode all apps go through the tunnel, DNS included. If the core stops, traffic stays blocked instead of leaking.
 - **Routing.** Global, "my country direct" (for any country), direct, plus your own rules and ad blocking.
 - **Tests.** Real delay, UDP and download speed. "Use fastest" picks the best server, and server groups switch on their own when one goes down.
@@ -88,6 +89,7 @@ Best is free software under the [GNU General Public License v3.0 or later](LICEN
 
 - **Три ядра, Best выбирает сам.** Xray, sing-box и (по желанию) mihomo. Для каждого сервера Best выбирает ядро, которое действительно может его запустить.
 - **Все распространённые ссылки и подписки.** VLESS (REALITY, XHTTP, Vision, VLESS Encryption), VMess, Trojan, Shadowsocks (включая 2022), Hysteria2, TUIC, WireGuard, AnyTLS, Naive, SOCKS и HTTP. Подписки: обычные ссылки, base64, YAML Clash / mihomo или JSON Xray.
+- **Подписки с лимитом устройств.** Панели вроде 3x-ui и Remnawave могут ограничивать число устройств на одну подписку; Best присылает нужный им ID устройства (HWID). Он придуманный и свой для каждой панели, это не настоящий ID оборудования, а имя компьютера не отправляется.
 - **Системный прокси или TUN.** В режиме TUN через туннель идут все программы, включая DNS. Если ядро останавливается, трафик блокируется, а не уходит напрямую.
 - **Маршрутизация.** Глобальный режим, «моя страна напрямую» (для любой страны), напрямую, а также свои правила и блокировка рекламы.
 - **Проверки.** Реальная задержка, UDP и скорость загрузки. «Самый быстрый» выбирает лучший сервер, а группы серверов сами переключаются, если сервер перестаёт работать.
@@ -158,6 +160,7 @@ Best — свободная программа под лицензией [GNU Ge
 
 - **سه هسته، بدون دردسر انتخاب.** Xray، sing-box و به‌دلخواه mihomo. برنامه برای هر سرور هسته‌ای را انتخاب می‌کند که واقعاً آن را اجرا می‌کند.
 - **همه‌ی لینک‌ها و اشتراک‌های رایج.** VLESS (با REALITY، XHTTP، Vision و VLESS Encryption)، VMess، Trojan، Shadowsocks (همراه 2022)، Hysteria2، TUIC، WireGuard، AnyTLS، Naive، SOCKS و HTTP. اشتراک می‌تواند لینک ساده، base64، YAML کلش و mihomo یا JSON ایکس‌ری باشد.
+- **اشتراک‌هایی که تعداد دستگاه را محدود می‌کنند.** پنل‌هایی مثل 3x-ui و Remnawave می‌توانند تعداد دستگاه‌های هر اشتراک را محدود کنند؛ Best شناسه‌ی دستگاهی (HWID) را که می‌خواهند می‌فرستد. این شناسه ساختگی و برای هر پنل جداست، نه شناسه‌ی واقعی سخت‌افزار، و اسم کامپیوتر فرستاده نمی‌شود.
 - **پراکسی سیستم یا TUN.** در حالت TUN همه‌ی برنامه‌ها و DNS از تونل رد می‌شوند. اگر هسته متوقف شود، ترافیک بسته می‌ماند و بیرون نمی‌رود.
 - **مسیریابی.** همه از پروکسی، «کشور من مستقیم» (برای هر کشوری)، همه مستقیم، و قانون‌های دلخواه و مسدود کردن تبلیغات.
 - **تست‌ها.** تأخیر واقعی، UDP و سرعت دانلود. «سریع‌ترین» بهترین سرور را انتخاب می‌کند و گروه سرورها وقتی سروری قطع شود خودشان سراغ سرور بعدی می‌روند.
@@ -232,6 +235,7 @@ Best 是一款快速、注重隐私的 Windows 代理客户端，基于 Xray 和
 
 - **三个内核，自动选择。** Xray、sing-box 以及（可选的）mihomo。Best 会为每个服务器选择真正能运行它的内核。
 - **支持所有常见链接和订阅。** VLESS（REALITY、XHTTP、Vision、VLESS Encryption）、VMess、Trojan、Shadowsocks（包括 2022）、Hysteria2、TUIC、WireGuard、AnyTLS、Naive、SOCKS 和 HTTP。订阅可以是普通链接、base64、Clash / mihomo YAML 或 Xray JSON。
+- **限制设备数量的订阅。** 3x-ui 和 Remnawave 等面板可以限制每个订阅的设备数量；Best 会发送它们需要的设备 ID（HWID）。该 ID 是生成的，每个面板各不相同，并非真实的硬件 ID，也不会发送计算机名称。
 - **系统代理或 TUN。** 在 TUN 模式下，所有应用（包括 DNS）都经过隧道。如果内核停止，流量会被阻断，而不会泄漏。
 - **路由。** 全局、“本国直连”（任何国家均可）、直连，以及自定义规则和广告拦截。
 - **测试。** 真实延迟、UDP 和下载速度。“使用最快”会选出最好的服务器，服务器组在某个服务器失效时会自动切换。
