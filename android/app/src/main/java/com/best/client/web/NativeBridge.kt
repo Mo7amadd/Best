@@ -281,10 +281,15 @@ class NativeBridge(private val activity: MainActivity) : WebViewCompat.WebMessag
         val url = a.getString("url")
         val ua = a.optString("userAgent").ifBlank { "Best/${BuildConfig.VERSION_NAME}" }
         val direct = a.optBoolean("direct", false)
+        // Subscriptions only: the device id for panels that limit devices (Settings → Send a device ID).
+        val hwid = a.optBoolean("hwid", false)
+        val deviceName = a.optString("deviceName").take(80)
         background(r) {
-            val res = Fetcher.get(url, ua, direct)
+            val extra = if (hwid) com.best.client.net.DeviceId.headers(activity, url, deviceName) else emptyMap()
+            val res = Fetcher.get(url, ua, direct, extra)
             JSONObject()
                 .put("status", res.status)
+                .put("device", res.device)
                 .put("body", res.body)
                 .put("userInfo", res.userInfo ?: JSONObject.NULL)
                 .put("title", res.title ?: JSONObject.NULL)
