@@ -14,7 +14,8 @@ object VpnToggle {
 
     fun isOn() = VpnState.current.phase.let { it == VpnState.Phase.CONNECTED || it == VpnState.Phase.CONNECTING }
 
-    fun toggle(ctx: Context) = if (isOn()) stop(ctx) else start(ctx)
+    /** A tap while it is still disconnecting does nothing (the next tap connects). */
+    fun toggle(ctx: Context) { if (VpnState.current.phase == VpnState.Phase.STOPPING) return; if (isOn()) stop(ctx) else start(ctx) }
 
     fun stop(ctx: Context) {
         if (isOn()) BestVpnService.stop(ctx)

@@ -27,7 +27,7 @@ const S = {
   routing: Core.settings.sanitizeRouting({}),
   servers: [],
   subs: [],
-  ui: { selected: '', tab: 'all', glass: true, sortFast: false, appMode: 'all', apps: [], metric: 'delay', updBeta: false, updAuto: true, updWifi: true, updLast: 0, logConnections: false, mode: 'vpn', bootConnect: false, allowTasker: false, vpnMtu: 1500, fakeDns: false, preferIpv6: false, autoTest: false, autoDelete: false },
+  ui: { selected: '', tab: 'all', glass: true, sortFast: false, appMode: 'all', apps: [], metric: 'delay', updBeta: false, updAuto: true, updWifi: true, updLast: 0, logConnections: false, mode: 'vpn', bootConnect: false, allowTasker: false, vpnMtu: 1500, fakeDns: false, preferIpv6: false, autoTest: false, autoDelete: false, listView: 'list', hiddenSubs: [] },
   exit: null, // { ip, cc } of the running connection
   lanIp: null,
   geoExt: { ir: 0, ru: 0 },
@@ -105,6 +105,10 @@ function cleanSubs(list) {
     autoUpdateHours: Number.isInteger(x.autoUpdateHours) && x.autoUpdateHours >= 0 && x.autoUpdateHours <= 720 ? x.autoUpdateHours : 0,
     updatedAt: Number(x.updatedAt) || Number(x.lastUpdate) || 0,
     notice: Core.util.cleanText(x.notice || '', 300),
+    supportUrl: httpUrl(x.supportUrl).slice(0, 500),
+    webPageUrl: httpUrl(x.webPageUrl).slice(0, 500),
+    announce: Core.util.cleanText(x.announce || '', 500),
+    infoNodes: (Array.isArray(x.infoNodes) ? x.infoNodes : []).map((n) => Core.util.cleanText(String(n || ''), 120)).filter(Boolean).slice(0, 5),
     info: x.info && typeof x.info === 'object' ? Core.subscription.parseUserInfo(Object.entries(x.info).map(([k, v]) => `${k}=${v}`).join(';')) : {},
   }));
 }
@@ -131,6 +135,8 @@ async function load() {
     S.ui.mode = ui.mode === 'proxy' ? 'proxy' : 'vpn';
     for (const k of ['bootConnect', 'allowTasker', 'fakeDns', 'preferIpv6', 'autoTest', 'autoDelete']) S.ui[k] = ui[k] === true;
     S.ui.vpnMtu = Number.isInteger(ui.vpnMtu) && ui.vpnMtu >= 1280 && ui.vpnMtu <= 9000 ? ui.vpnMtu : 1500;
+    S.ui.listView = ui.listView === 'grid' ? 'grid' : 'list';
+    S.ui.hiddenSubs = Array.isArray(ui.hiddenSubs) ? ui.hiddenSubs.filter((id) => typeof id === 'string' && S.subs.some((x) => x.id === id)).slice(0, 100) : [];
   }
 }
 
@@ -162,15 +168,35 @@ function reconnect() {
 // ------------------------------------------------------------------ helpers
 
 const nameOf = (s) => (s && (s.remark || s.address)) || '';
+/** What the library says ("Lib v40, Xray-core v26.11.9") as the Xray version alone: "26.11.9". */
+const xrayVersion = () => { const v = String(S.info.xray || ''); const m = /Xray-core\s+v?([\w.+-]+)/i.exec(v); return m ? m[1] : v; };
 const protoOf = (s) => PROTO_LABEL[s.protocol] || String(s.protocol || '').toUpperCase();
+// Short protocol tag of the two-column view.
+const SHORT_PROTO = { vless: 'VLESS', vmess: 'VMESS', trojan: 'TROJAN', shadowsocks: 'SS', hysteria2: 'HY2', hysteria: 'HY', tuic: 'TUIC', wireguard: 'WG', anytls: 'ANYTLS', naive: 'NAIVE', socks: 'SOCKS', http: 'HTTP', group: 'GROUP', custom: 'JSON' };
+const shortProto = (s) => SHORT_PROTO[s.protocol] || String(s.protocol || '').toUpperCase().slice(0, 6);
 const subOf = (s) => (s.protocol === 'group'
   ? `${t('ed_group')} · ${t('membersN', { n: num((s.members || []).length) })} · ${t(`strat_${s.strategy || 'leastPing'}`)}`
   : `${protoOf(s)} · ${Core.links.transportLabel(s)}`);
 const selectedServer = () => S.servers.find((s) => s.id === S.ui.selected) || null;
 
+/** Configs of subscriptions the user switched off (Subscriptions › Show in configs) stay out of the lists. */
+const subShown = (sub) => !(S.ui.hiddenSubs || []).includes(sub.id);
+const shownServers = () => { const hidden = new Set(S.ui.hiddenSubs || []); return hidden.size ? S.servers.filter((s) => !s.subId || !hidden.has(s.subId)) : S.servers; };
+
+function setSubShown(sub, on) {
+  const hidden = new Set(S.ui.hiddenSubs || []);
+  if (on) hidden.delete(sub.id); else hidden.add(sub.id);
+  S.ui.hiddenSubs = [...hidden];
+  // The chosen config was in it: the first config still shown takes its place.
+  const sel = selectedServer();
+  if (!on && sel && sel.subId === sub.id) { const next = shownServers()[0]; S.ui.selected = next ? next.id : ''; }
+  save('ui');
+  render();
+}
+
 function visibleServers() {
   let list;
-  if (S.ui.tab === 'all') list = S.servers;
+  if (S.ui.tab === 'all') list = shownServers();
   else if (S.ui.tab === 'manual') list = S.servers.filter((s) => !s.subId);
   else list = S.servers.filter((s) => s.subId === S.ui.tab);
   const q = S.searching ? S.query.trim().toLowerCase() : '';
@@ -189,10 +215,13 @@ function rate(bps) {
   return [num(bps), 'B/s'];
 }
 
+// An amount kept in one piece inside right-to-left text ("۹۹٫۴ GB", never "GB ۹۹٫۴").
+const isolate = (text) => `\u2068${text}\u2069`;
+
 function bytes(n) {
-  if (n >= 1024 ** 3) return `${num(n / 1024 ** 3, 1)} GB`;
-  if (n >= 1024 ** 2) return `${num(n / 1024 ** 2, 1)} MB`;
-  return `${num(Math.round(n / 1024))} KB`;
+  if (n >= 1024 ** 3) return isolate(`${num(n / 1024 ** 3, 1)} GB`);
+  if (n >= 1024 ** 2) return isolate(`${num(n / 1024 ** 2, 1)} MB`);
+  return isolate(`${num(Math.round(n / 1024))} KB`);
 }
 
 function clock(ms) {
@@ -211,7 +240,13 @@ function ago(ts) {
 }
 
 let toastTimer = 0;
+/** One line on the Logs page (source "Best"): what the user was told, and quiet background work. */
+function logApp(level, text) {
+  call('logs.add', { level, text: String(text || '').slice(0, 400) }).catch(() => {});
+}
+
 function showToast(text, err = false) {
+  if (text !== t('copied')) logApp(err ? 'error' : 'info', text);
   S.toast = { text, err };
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { S.toast = null; render(); }, 2600);
@@ -269,6 +304,7 @@ async function serverIps(server) {
 
 function toggleConnect() {
   const p = S.vpn.phase;
+  if (p === 'stopping') return; // still disconnecting: the next tap connects
   if (p === 'connected' || p === 'connecting') call('vpn.stop').catch(() => {});
   else connect();
 }
@@ -428,6 +464,21 @@ async function importText(text) {
   showToast(fresh.length === 1 ? t('added1') : t('addedN', { n: num(fresh.length) }));
 }
 
+/**
+ * Text another app shared with Best: any app can send it, so nothing is added before the user
+ * says yes (the same question as a best:// link). A subscription link opens "Add subscription".
+ */
+function askShared(text) {
+  const raw = String(text || '').trim().slice(0, 200000);
+  if (!raw) return;
+  S.page = 'configs';
+  if (/^https?:\/\/\S+$/i.test(raw)) return openSheet({ type: 'addSub', url: raw, name: '' });
+  const parsed = Core.subscription.parseContent(raw);
+  const { servers } = Core.subscription.splitInfoNodes(parsed.servers || []);
+  if (servers.length) openSheet({ type: 'linkImport', text: raw, names: servers.slice(0, 8).map(nameOf), n: servers.length });
+  else showToast(t('nothingFound'), true);
+}
+
 async function fromClipboard() {
   try { await importText(await call('clip.read')); } catch (e) { showToast(errText(e.code), true); }
 }
@@ -450,12 +501,15 @@ async function downloadSub(sub) {
   try {
     const ua = sub.userAgent || S.settings.subUserAgent || '';
     const direct = !S.settings.subViaProxy;
-    const res = await call('net.fetch', { url: sub.url, userAgent: ua, direct });
+    // Panels that limit devices (Remnawave …) get a device id; the native side makes it per panel.
+    const hwid = S.settings.subHwid !== false;
+    const deviceName = String(S.settings.subHwidName || '');
+    const res = await call('net.fetch', { url: sub.url, userAgent: ua, direct, hwid, deviceName });
     let all = Core.subscription.parseContent(res.body, { subId: sub.id }).servers || [];
     // Extra links of the same subscription: their configs join this list.
     for (const extra of sub.moreUrls || []) {
       try {
-        const more = await call('net.fetch', { url: extra, userAgent: ua, direct });
+        const more = await call('net.fetch', { url: extra, userAgent: ua, direct, hwid, deviceName });
         all = all.concat(Core.subscription.parseContent(more.body, { subId: sub.id }).servers || []);
       } catch { /* one link failing doesn't stop the others */ }
     }
@@ -474,6 +528,11 @@ async function downloadSub(sub) {
     });
     if ((split.servers || []).length && !servers.length && (keep || drop)) throw Object.assign(new Error('FILTER_EMPTY'), { code: 'FILTER_EMPTY' });
     sub.info = Core.subscription.parseUserInfo(res.userInfo || '');
+    // What the panel says about itself: support / web page links, announcement, info entries.
+    sub.supportUrl = httpUrl(res.supportUrl).slice(0, 500);
+    sub.webPageUrl = httpUrl(res.webPageUrl).slice(0, 500);
+    sub.announce = Core.util.cleanText(res.announce ? decodeTitle(res.announce) : '', 500);
+    sub.infoNodes = (split.info || []).map((n) => Core.util.cleanText(String(n || ''), 120)).filter(Boolean).slice(0, 5);
     // Expired / out of data: panels then send only info entries. The old configs stay, the
     // panel's message is shown.
     const info = split.info || [];
@@ -483,7 +542,11 @@ async function downloadSub(sub) {
       save('subs');
       return S.servers.filter((s) => s.subId === sub.id).length;
     }
-    if (!servers.length) throw Object.assign(new Error('EMPTY'), { code: 'EMPTY' });
+    if (!servers.length) {
+      // An empty answer with the panel's device-limit flag: say that, not "empty".
+      const code = res.device === 'limit' ? 'HWID_LIMIT' : res.device === 'required' ? 'HWID_REQUIRED' : 'EMPTY';
+      throw Object.assign(new Error(code), { code });
+    }
     sub.notice = '';
     // Keep the selection on the same config after an update (same connection details).
     const old = S.servers.find((s) => s.id === S.ui.selected && s.subId === sub.id);
@@ -547,8 +610,11 @@ async function updateSub(sub) {
 }
 
 /** Updates the subscriptions behind the current list (every subscription on "All"). */
+/** The subscriptions the list on screen comes from ("Manual" and an empty list: none). */
+const subsOfTab = () => (S.ui.tab === 'all' ? S.subs : S.subs.filter((x) => x.id === S.ui.tab)).filter((x) => x.enabled !== false);
+
 async function refreshSubs() {
-  const subs = (S.ui.tab === 'all' ? S.subs : S.subs.filter((x) => x.id === S.ui.tab)).filter((x) => x.enabled !== false);
+  const subs = subsOfTab();
   if (!subs.length) return showToast(t('noSubHere'), true);
   S.refreshing = true;
   render();
@@ -567,19 +633,26 @@ async function autoUpdateSubs() {
   const hours = Number(S.settings.subAutoUpdateHours) || 0;
   if (!hours || S.refreshing) return;
   for (const sub of S.subs.filter((x) => x.enabled !== false && Date.now() - (x.updatedAt || 0) > (x.autoUpdateHours || hours) * 3600000)) {
-    try { await downloadSub(sub); await afterSubUpdate(sub); } catch { /* tried again next hour */ }
+    try {
+      await downloadSub(sub);
+      logApp('info', `${sub.name || t('subLink')}: ${t('subsUpdated')}`);
+      await afterSubUpdate(sub);
+    } catch (e) { logApp('warning', `${sub.name || t('subLink')}: ${errText(e.code)}`); /* tried again next hour */ }
   }
 }
 
-// Pull the list down (when it is at the top) to update subscriptions.
-const PULL_GO = 56;
+// Pull the list down (when it is at the top) to update that subscription. Only in one
+// subscription's own tab (not "All", not "Manual"), and only after a long, deliberate pull:
+// the finger has to travel about 230 px, and nothing happens when it goes back up before letting go.
+const PULL_GO = 96;
 let pullFrom = null;
 function pullStart(e) {
-  pullFrom = e.currentTarget.scrollTop <= 0 && !S.refreshing && !S.sheet ? e.touches[0].clientY : null;
+  const ownTab = S.ui.tab !== 'all' && S.ui.tab !== 'manual' && subsOfTab().length > 0;
+  pullFrom = e.currentTarget.scrollTop <= 0 && !S.refreshing && !S.sheet && ownTab ? e.touches[0].clientY : null;
 }
 function pullMove(e) {
   if (pullFrom === null) return;
-  const d = Math.max(0, Math.min(220, e.touches[0].clientY - pullFrom)) * 0.5;
+  const d = Math.round(Math.max(0, Math.min(300, e.touches[0].clientY - pullFrom)) * 0.42);
   if (d !== S.pull) { S.pull = d; render(); }
 }
 function pullEnd() {
@@ -717,17 +790,20 @@ function spinnerRing() {
 }
 
 function tabs() {
-  const items = [['all', t('all'), S.servers.length], ['manual', t('manual'), S.servers.filter((s) => !s.subId).length]];
-  for (const sub of S.subs) items.push([sub.id, sub.name || t('subLink'), S.servers.filter((s) => s.subId === sub.id).length]);
+  const manual = S.servers.filter((s) => !s.subId).length;
+  const items = [['all', t('all'), shownServers().length]];
+  // "Manual" only while there is a config added by hand; it comes back with the first one.
+  if (manual) items.push(['manual', t('manual'), manual]);
+  for (const sub of S.subs.filter(subShown)) items.push([sub.id, sub.name || t('subLink'), S.servers.filter((s) => s.subId === sub.id).length]);
   if (!items.some(([id]) => id === S.ui.tab)) S.ui.tab = 'all';
-  const i = items.findIndex(([id]) => id === S.ui.tab);
-  const n = items.length;
-  return glass('div', 'seg sm', null,
-    h('span', { class: 'seg-ind', style: { width: `calc((100% - 8px) / ${n})`, transform: `translateX(${(isRtl() ? -1 : 1) * i * 100}%)` } }),
-    items.map(([id, label, count]) => h('button', {
-      class: S.ui.tab === id ? 'on' : '', 'data-key': id,
-      onClick: () => { S.ui.tab = id; save('ui'); render(); },
-    }, `${label} `, h('span', null, num(count)))));
+  // Each tab as wide as its name (no "moha @…"); the row scrolls sideways when they don't all fit.
+  // The capsule stays still; only its inside scrolls, so its rounded edge is never cut.
+  return glass('div', 'seg sm tabs-wrap', { 'data-key': 'tabs' },
+    h('div', { class: 'tabs-scroll' },
+      items.map(([id, label, count]) => h('button', {
+        class: S.ui.tab === id ? 'on' : '', 'data-key': id,
+        onClick: () => { S.ui.tab = id; save('ui'); render(); },
+      }, h('b', { dir: 'auto' }, label), h('span', null, num(count))))));
 }
 
 function delayCell(s) {
@@ -748,26 +824,34 @@ function delayCell(s) {
 function viewConfigs() {
   const list = visibleServers();
   const idx = list.findIndex((s) => s.id === S.ui.selected);
+  // Two columns (Settings › Config list): small cards, the chosen one lit; the list keeps its sliding puck.
+  const grid = S.ui.listView === 'grid';
   const rows = list.map((s) => h('button', {
-    class: 'row', 'data-key': s.id,
+    class: `row ${grid && s.id === S.ui.selected ? 'on' : ''}`, 'data-key': s.id,
     onClick: () => select(s.id),
     onContextmenu: (e) => { e.preventDefault(); openSheet({ type: 'row', id: s.id }); },
   },
-  h('span', { class: 'row-main' },
-    h('span', { class: 'row-name' }, nameOf(s)),
-    h('span', { class: 'row-sub' }, subOf(s))),
-  delayCell(s)));
+  grid
+    ? [h('span', { class: 'row-name' }, nameOf(s)), h('span', { class: 'row-foot' }, h('span', { class: 'row-tag mono' }, shortProto(s)), delayCell(s))]
+    : [h('span', { class: 'row-main' },
+      h('span', { class: 'row-name' }, nameOf(s)),
+      h('span', { class: 'row-sub' }, subOf(s))),
+    delayCell(s)]));
   const showPull = S.pull > 0 || S.refreshing;
   return h('div', { class: 'configs', 'data-key': 'configs' },
+    // One pill in the gap above the list (the list moves down with the finger): icon, and what
+    // letting go would do, so the text never lies over the configs.
     showPull ? h('div', { class: 'pull', 'data-key': 'pull' },
-      glass('span', `pull-ball sm ${S.refreshing ? 'spin' : ''}`, {
-        role: 'status', 'aria-label': S.refreshing ? t('updating') : S.pull >= PULL_GO ? t('pullUpdate') : t('pulling'),
-        style: { transform: `translateY(${S.refreshing ? 12 : S.pull - 30}px) rotate(${S.refreshing ? 0 : S.pull * 4}deg)`, opacity: String(S.refreshing ? 1 : Math.min(1, S.pull / PULL_GO)) },
-      }, icon('refresh', 19, 2))) : null,
+      glass('span', `pull-pill ${S.refreshing ? 'spin' : ''} ${!S.refreshing && S.pull >= PULL_GO ? 'go' : ''}`, {
+        role: 'status',
+        style: { transform: `translateY(${S.refreshing ? 6 : Math.max(0, S.pull - 46)}px)`, opacity: String(S.refreshing ? 1 : Math.max(0, Math.min(1, (S.pull - 30) / 16))) }, // shown once the gap fits it
+      },
+      h('span', { class: 'pull-icon', style: { transform: `rotate(${S.refreshing ? 0 : S.pull * 4}deg)` } }, icon('refresh', 17, 2)),
+      h('span', null, S.refreshing ? t('updating') : S.pull >= PULL_GO ? t('pullUpdate') : t('pulling')))) : null,
     h('div', { class: 'list-scroll', onTouchstart: pullStart, onTouchmove: pullMove, onTouchend: pullEnd, onTouchcancel: pullEnd },
       list.length
-        ? h('div', { class: 'list', style: { transform: `translateY(${S.refreshing ? 52 : S.pull}px)`, transition: S.pull ? 'none' : 'transform .3s' } },
-          h('span', { class: 'puck', style: { transform: `translateY(${Math.max(idx, 0) * 64}px)`, opacity: idx < 0 ? '0' : '1' } }),
+        ? h('div', { class: `list ${grid ? 'grid' : ''}`, style: { transform: `translateY(${S.refreshing ? 52 : S.pull}px)`, transition: S.pull ? 'none' : 'transform .3s' } },
+          grid ? null : h('span', { class: 'puck', style: { transform: `translateY(${Math.max(idx, 0) * 64}px)`, opacity: idx < 0 ? '0' : '1' } }),
           rows)
         : S.searching && S.query.trim()
           ? h('div', { class: 'empty' }, h('span', { class: 'empty-icon' }, icon('search', 28, 1.7)), h('b', null, t('noResults')))
@@ -797,7 +881,31 @@ function viewConfigs() {
         S.testing
           ? glass('button', 'round-btn sm stop', { 'aria-label': t('stopTests'), onClick: stopTests },
             h('span', { class: 'ring-spin' }), icon('close', 16, 2.4))
-          : glass('button', 'round-btn sm', { 'aria-label': t('testTitle'), onClick: () => openSheet({ type: 'test' }) }, icon('bolt', 19, 1.8)))));
+          : glass('button', 'round-btn sm', { 'aria-label': t('testTitle'), onClick: () => openSheet({ type: 'test' }) }, icon('bolt', 19, 1.8))),
+      S.searching ? null : subStrip()));
+}
+
+/** Traffic and time of a subscription, as the strip and the details sheet show them. */
+function subUsage(sub) {
+  const info = sub.info || {};
+  const used = (info.upload || 0) + (info.download || 0);
+  const pct = info.total ? Math.min(1, used / info.total) : 0;
+  const days = info.expire ? Math.ceil((info.expire * 1000 - Date.now()) / 86400000) : null;
+  const warn = pct > 0.85 || (days !== null && days < 7);
+  const amount = t('usedOf', { used: bytes(used), total: info.total ? bytes(info.total) : '∞' });
+  const time = days === null ? t('noExpiry') : days > 0 ? t('daysLeft', { n: num(days) }) : t('expired');
+  return { info, used, pct, days, warn, amount, time };
+}
+
+/** One line under the tabs of a subscription's own tab: traffic, time left; tap for the details. */
+function subStrip() {
+  const sub = S.subs.find((x) => x.id === S.ui.tab);
+  if (!sub) return null;
+  const u = subUsage(sub);
+  return h('button', { class: 'sub-strip', 'data-key': 'sub-strip', 'aria-label': t('subDetails'), onClick: () => openSheet({ type: 'subInfo', id: sub.id }) },
+    h('span', { class: `usage-bar ${u.info.total ? '' : 'unlimited'} ${u.warn ? 'warn' : ''}` }, h('span', { style: { width: `${u.info.total ? Math.max(2, u.pct * 100) : 100}%` } })),
+    h('span', { class: 'sub-strip-text ltr-num' }, `${u.amount} · `, h('span', { style: u.warn ? { color: 'var(--fair)' } : null }, u.time)),
+    sub.announce || sub.supportUrl || sub.webPageUrl || (sub.infoNodes || []).length ? h('span', { class: 'sub-strip-more' }, icon('info', 16, 1.9)) : icon('chevron', 16, 1.9));
 }
 
 function openSearch() {
@@ -822,21 +930,23 @@ function viewSubs() {
     const warn = pct > 0.85 || (days !== null && days < 7);
     const count = S.servers.filter((s) => s.subId === sub.id).length;
     const C = 2 * Math.PI * 23;
-    return glass('article', 'card', { 'data-key': sub.id },
+    return glass('article', `card ${subShown(sub) ? '' : 'sub-off'}`, { 'data-key': sub.id, onClick: (e) => { if (!e.target.closest('button')) openSheet({ type: 'subInfo', id: sub.id }); } },
       h('div', { class: 'conn-row' },
         info.total ? h('div', { class: 'ring' }, ringSvg(pct, warn, C), h('span', { class: 'mono' }, `${num(Math.round(pct * 100))}%`)) : null,
         h('div', { class: 'conn-text' },
           h('span', { class: 'conn-name' }, sub.name || t('subLink')),
-          info.total ? h('span', { class: 'conn-detail' }, t('usedOf', { used: bytes(used), total: bytes(info.total) })) : null,
-          days !== null ? h('span', { class: 'conn-detail', style: warn ? { color: 'var(--fair)' } : null }, days > 0 ? t('daysLeft', { n: num(days) }) : t('expired')) : null),
-        h('button', { class: 'icon-btn', 'aria-label': t('update'), onClick: () => updateSub(sub), disabled: S.busy[sub.id] },
-          S.busy[sub.id] ? h('span', { class: 'mini-spin' }) : icon('refresh', 18, 1.9))),
+          h('span', { class: 'conn-detail' }, t('usedOf', { used: bytes(used), total: info.total ? bytes(info.total) : '∞' })),
+          h('span', { class: 'conn-detail', style: warn ? { color: 'var(--fair)' } : null }, days === null ? t('noExpiry') : days > 0 ? t('daysLeft', { n: num(days) }) : t('expired'))),
+        h('span', { class: 'sub-actions' },
+          h('button', { class: 'icon-btn sm', 'aria-label': t('update'), onClick: () => updateSub(sub), disabled: S.busy[sub.id] },
+            S.busy[sub.id] ? h('span', { class: 'mini-spin' }) : icon('refresh', 17, 1.9)),
+          h('button', { class: 'icon-btn sm', 'aria-label': t('edit'), onClick: () => openSheet({ type: 'editSub', id: sub.id, draft: { ...sub, moreUrls: (sub.moreUrls || []).join('\n') } }) }, icon('edit', 17, 1.9)),
+          h('button', { class: 'icon-btn sm', 'aria-label': t('delete'), onClick: () => openSheet({ type: 'removeSub', id: sub.id }) }, icon('trash', 17, 1.9)))),
       h('div', { class: 'chips' },
         h('span', { class: 'chip' }, t('configsN', { n: num(count) })),
         h('span', { class: 'chip' }, t('subUpdated', { when: ago(sub.updatedAt) })),
-        h('span', { style: { flex: '1' } }),
-        h('button', { class: 'chip', onClick: () => openSheet({ type: 'editSub', id: sub.id, draft: { ...sub, moreUrls: (sub.moreUrls || []).join('\n') } }) }, t('edit')),
-        h('button', { class: 'chip', onClick: () => openSheet({ type: 'removeSub', id: sub.id }) }, t('delete'))),
+        h('button', { class: 'sub-show', 'aria-label': t('subShow'), onClick: () => setSubShown(sub, !subShown(sub)) },
+          h('span', null, t('subShow')), switchEl(subShown(sub)))),
       sub.notice ? h('div', { class: 'note warn' }, icon('info', 18, 1.9), h('span', null, sub.notice)) : null);
   });
   return h('div', { class: 'page', 'data-key': 'subs' },
@@ -1003,7 +1113,11 @@ function viewSettings() {
       h('div', { class: 'item' }, h('div', { class: 'item-main' }, t('theme')),
         h('div', { class: 'pick' }, [['dark', t('dark')], ['light', t('light')]].map(([v, label]) => h('button', { class: S.settings.theme === v ? 'on' : '', 'data-key': v, onClick: () => setS({ theme: v }) }, label)))),
       h('button', { class: 'item', onClick: () => { S.ui.glass = !S.ui.glass; save('ui'); applyLook(); render(); } },
-        h('div', { class: 'item-main' }, t('glass'), h('small', null, t('glassHint'))), sw(S.ui.glass))),
+        h('div', { class: 'item-main' }, t('glass'), h('small', null, t('glassHint'))), sw(S.ui.glass)),
+      h('div', { class: 'item' }, h('div', { class: 'item-main' }, t('listLook'), h('small', null, t('listLookHint'))),
+        h('div', { class: 'pick' }, [['list', t('listRows')], ['grid', t('listGrid')]].map(([v, label]) => h('button', {
+          class: (S.ui.listView === 'grid' ? 'grid' : 'list') === v ? 'on' : '', 'data-key': `list-${v}`, onClick: () => { S.ui.listView = v; save('ui'); render(); },
+        }, label))))),
     h('div', { class: 'section-label' }, t('connection')),
     glass('div', 'group', null,
       h('div', { class: 'item' }, h('div', { class: 'item-main' }, t('modeTitle'),
@@ -1027,11 +1141,12 @@ function viewSettings() {
         h('button', { class: 'icon-btn', 'aria-label': t('copyLink'), onClick: async () => { await call('clip.write', { text: `${S.settings.lanUser}:${S.settings.lanPass}`, sensitive: true }).catch(() => {}); showToast(t('copied')); } }, icon('copy', 18, 1.9))) : null,
       h('button', { class: 'item', onClick: () => setUi({ allowTasker: !S.ui.allowTasker }) },
         h('div', { class: 'item-main' }, t('allowTasker'), h('small', null, t('allowTaskerHint'))), sw(S.ui.allowTasker)),
-      h('div', { class: 'item' }, h('div', { class: 'item-main' }, t('autoUpdate')),
-        h('div', { class: 'pick' }, [0, 6, 12, 24].map((n) => h('button', {
+      h('div', { class: 'item' }, h('div', { class: 'item-main' }, t('autoUpdate'))),
+      h('div', { class: 'item', style: { borderTop: '0', paddingTop: '0' } },
+        h('div', { class: 'pick even' }, [0, 6, 12, 24].map((n) => h('button', {
           class: Number(S.settings.subAutoUpdateHours) === n ? 'on' : '', 'data-key': `au${n}`,
           onClick: () => { setS({ subAutoUpdateHours: n }); autoUpdateSubs(); },
-        }, n ? t('everyH', { n: num(n) }) : t('off')))))),
+        }, n ? t('hoursShort', { n: num(n) }) : t('off')))))),
     glass('div', 'group', { style: { marginTop: '10px' } },
       h('button', { class: 'item', onClick: () => { S.page = 'advanced'; render(); } }, icon('settings', 19, 1.8),
         h('div', { class: 'item-main' }, t('adv'), h('small', null, t('advHint'))), chevron()),
@@ -1048,7 +1163,7 @@ function viewSettings() {
     h('div', { class: 'section-label' }, t('about')),
     glass('div', 'group', null,
       h('div', { class: 'item' }, h('div', { class: 'item-main' }, 'Best'), h('span', { class: 'value mono ltr' }, S.info.version || '')),
-      h('div', { class: 'item' }, h('div', { class: 'item-main' }, 'Xray'), h('span', { class: 'value mono ltr' }, S.info.xray || '')),
+      h('div', { class: 'item' }, h('div', { class: 'item-main' }, 'Xray'), h('span', { class: 'value mono ltr' }, xrayVersion())),
       h('div', { class: 'item' }, h('div', { class: 'item-main' }, 'sing-box'), h('span', { class: 'value mono ltr' }, S.info.singbox || '—')),
       h('button', { class: 'item', onClick: () => openSheet({ type: 'licenses' }) }, icon('info', 19, 1.8),
         h('div', { class: 'item-main' }, t('licenses'), h('small', null, t('licensesHint'))), chevron())));
@@ -1109,6 +1224,31 @@ function viewSheet() {
         h('button', { class: 'item', onClick: () => { closeSheet(); deleteFailed(); } }, icon('close', 19, 1.8), h('div', { class: 'item-main' }, t('delFailed'))),
         h('button', { class: 'item', onClick: () => { closeSheet(); deleteDuplicates(); } }, icon('copy', 19, 1.8), h('div', { class: 'item-main' }, t('delDup'))),
         h('button', { class: 'item', onClick: () => { closeSheet(); copyAllLinks(); } }, icon('link', 19, 1.8), h('div', { class: 'item-main' }, t('copyAll')))),
+    ];
+  } else if (sh.type === 'subInfo') {
+    const sub = S.subs.find((x) => x.id === sh.id);
+    if (!sub) return null;
+    const u = subUsage(sub);
+    title = sub.name || t('subLink');
+    const row = (label, value, style) => h('div', { class: 'item' }, h('div', { class: 'item-main' }, label), h('span', { class: 'value', style }, value));
+    const open = (url) => call('app.openPanel', { url }).catch(() => showToast(errText('BAD_URL'), true));
+    body = [
+      h('div', { class: 'sub-usage' },
+        h('span', { class: `usage-bar big ${u.info.total ? '' : 'unlimited'} ${u.warn ? 'warn' : ''}` }, h('span', { style: { width: `${u.info.total ? Math.max(2, u.pct * 100) : 100}%` } })),
+        h('div', { class: 'sub-usage-text' }, h('b', null, u.amount), u.info.total ? h('span', null, `${num(Math.round(u.pct * 100))}%`) : h('span', null, t('unlimited')))),
+      glass('div', 'group', null,
+        row(t('download'), bytes(u.info.download || 0)),
+        row(t('upload'), bytes(u.info.upload || 0)),
+        row(t('expires'), u.info.expire ? `${new Date(u.info.expire * 1000).toLocaleDateString(S.settings.language === 'fa' ? 'fa-IR' : S.settings.language)} · ${u.time}` : t('noExpiry'), u.warn ? { color: 'var(--fair)' } : null),
+        row(t('subUpdatedLabel'), sub.updatedAt ? ago(sub.updatedAt) : '—'),
+        row(t('configsLabel'), num(S.servers.filter((s) => s.subId === sub.id).length))),
+      sub.announce ? h('div', { class: 'note' }, icon('info', 18, 1.9), h('span', null, sub.announce)) : null,
+      sub.notice ? h('div', { class: 'note warn' }, icon('alert', 18, 1.9), h('span', null, sub.notice)) : null,
+      (sub.infoNodes || []).length ? glass('div', 'group', null, sub.infoNodes.map((n, i) => h('div', { class: 'item', 'data-key': `in${i}` }, h('div', { class: 'item-main' }, h('small', null, n))))) : null,
+      sub.supportUrl || sub.webPageUrl ? h('div', { class: 'two-btn' },
+        sub.supportUrl ? h('button', { class: 'btn', onClick: () => open(sub.supportUrl) }, icon('info', 18, 1.9), t('subSupport')) : null,
+        sub.webPageUrl ? h('button', { class: 'btn', onClick: () => open(sub.webPageUrl) }, icon('link', 18, 1.9), t('subWebPage')) : null) : null,
+      h('button', { class: 'btn primary', disabled: S.busy[sub.id], onClick: () => { closeSheet(); updateSub(sub); } }, icon('refresh', 18, 1.9), t('update')),
     ];
   } else if (sh.type === 'licenses') {
     title = t('licenses');
@@ -1207,7 +1347,7 @@ function viewSheet() {
     const d = sh.draft;
     title = t('subEdit');
     const input = (k, label, opts = {}) => h('div', { class: 'field' }, h('label', null, label),
-      h(opts.area ? 'textarea' : 'input', { class: opts.plain ? '' : 'ltr', type: 'text', autocomplete: 'off', spellcheck: 'false', autocapitalize: 'off', placeholder: opts.placeholder || '', value: d[k] || '', 'data-key': `es-${k}`, onInput: (e) => { d[k] = e.target.value; } }),
+      h(opts.area ? 'textarea' : 'input', { class: `${opts.plain ? '' : 'ltr'} ${opts.short ? 'short' : ''}`, type: 'text', autocomplete: 'off', spellcheck: 'false', autocapitalize: 'off', placeholder: opts.placeholder || '', value: d[k] || '', 'data-key': `es-${k}`, onInput: (e) => { d[k] = e.target.value; } }),
       opts.hint ? h('small', null, opts.hint) : null);
     const fronts = S.servers.filter((x) => x.protocol !== 'group' && x.protocol !== 'custom' && x.subId !== sub.id);
     body = [
@@ -1216,8 +1356,9 @@ function viewSheet() {
           h('div', { class: 'item-main' }, t('subEnabled')), switchEl(d.enabled !== false))),
       input('name', t('subName'), { plain: true }),
       input('url', t('subUrl'), { placeholder: 'https://' }),
-      input('moreUrls', t('subMore'), { area: true, hint: t('subMoreHint') }),
-      h('div', { class: 'two' }, input('filter', t('subFilter'), { hint: t('subFilterHint') }), input('exclude', t('subExclude'))),
+      input('moreUrls', t('subMore'), { area: true, short: true, hint: t('subMoreHint') }),
+      input('filter', t('subFilter'), { hint: t('subFilterHint') }),
+      input('exclude', t('subExclude')),
       input('userAgent', t('subUaOwn'), { placeholder: S.settings.subUserAgent || 'Best' }),
       h('div', { class: 'field' }, h('label', null, t('subVia')),
         h('select', { 'data-key': 'es-via', onChange: (e) => { d.via = e.target.value; } },
@@ -1279,7 +1420,7 @@ function view() {
   ];
 }
 
-const ctx = { S, render: () => render(), save, showToast, glass, switchEl, ago, reconnect, applyToConnection, openSheet, closeSheet, cleanServers, cleanSubs, applyLook: () => applyLook(), nameOf };
+const ctx = { S, render: () => render(), save, showToast, glass, switchEl, ago, reconnect, applyToConnection, openSheet, closeSheet, cleanServers, cleanSubs, applyLook: () => applyLook(), nameOf, xrayVersion };
 const editor = createEditor(ctx);
 const updates = createUpdates(ctx);
 const more = createMore(ctx);
@@ -1291,7 +1432,20 @@ function render() {
     frame = 0;
     mount(root, view());
     syncListTop();
+    showChosenTab();
   });
+}
+
+/** The chosen config tab, when the row scrolls sideways, is kept fully in sight. */
+function showChosenTab() {
+  const row = root.querySelector('.tabs-scroll');
+  const on = row && row.querySelector('button.on');
+  if (!on) return;
+  const r = row.getBoundingClientRect();
+  const b = on.getBoundingClientRect();
+  // 16 px from the edges, clear of their fade.
+  if (b.left < r.left + 16) row.scrollLeft -= r.left + 16 - b.left;
+  else if (b.right > r.right - 16) row.scrollLeft += b.right - (r.right - 16);
 }
 
 /** The list scrolls under the fixed top part; its first row starts right below it. */
@@ -1397,7 +1551,7 @@ on('link', () => takeLink());
 
 on('shared', async () => {
   const text = await call('intent.take').catch(() => null);
-  if (text) importText(text);
+  if (text) askShared(text);
 });
 
 // The connected-time clock.
@@ -1417,7 +1571,7 @@ async function start() {
     S.ready = true;
     setVpn(hello.vpn);
     const shared = await call('intent.take').catch(() => null);
-    if (shared) importText(shared);
+    if (shared) askShared(shared);
     takeLink();
     call('geo.info').then((g) => { if (g && g.ext) S.geoExt = { ir: Number(g.ext.ir) || 0, ru: Number(g.ext.ru) || 0 }; }).catch(() => {});
     autoUpdateSubs();

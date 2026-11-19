@@ -80,6 +80,7 @@ class NativeBridge(private val activity: MainActivity) : WebViewCompat.WebMessag
         "app.exit" to { _, r -> activity.moveTaskToBack(true); r.send(true, null) },
         "app.bars" to { a, r -> activity.setBars(a.optBoolean("light", false)); r.send(true, null) },
         "app.open" to ::openUrl,
+        "app.openPanel" to ::openPanelUrl,
         "app.share" to ::share,
         "store.read" to { a, r -> background(r) { store.read(a.getString("name")) } },
         "store.write" to { a, r -> background(r) { store.write(a.getString("name"), a.getString("text")); true } },
@@ -107,7 +108,15 @@ class NativeBridge(private val activity: MainActivity) : WebViewCompat.WebMessag
         "dav.put" to { a, r -> val d = dav(a); val name = a.getString("name"); val text = a.getString("text"); background(r) { d.put(name, text); true } },
         "dav.list" to { a, r -> val d = dav(a); background(r) { JSONArray(d.list().map { JSONObject().put("name", it.first).put("modified", it.second) }) } },
         "dav.get" to { a, r -> val d = dav(a); val name = a.getString("name"); background(r) { d.get(name) } },
-        "logs.read" to { a, r -> val access = a.optString("kind") == "access"; background(r) { com.best.client.vpn.Logs.tail(if (access) com.best.client.vpn.Logs.access(activity) else com.best.client.vpn.Logs.error(activity)) } },
+        "logs.read" to { a, r ->
+            val L = com.best.client.vpn.Logs
+            val file = when (a.optString("kind")) { "access" -> L.access(activity); "app" -> L.app(activity); else -> L.error(activity) }
+            background(r) { L.tail(file) }
+        },
+        // What the page itself did (subscriptions, tests, errors shown to the user), for the Logs page.
+        "logs.add" to { a, r ->
+            background(r) { com.best.client.vpn.Logs.add(activity, a.optString("level", "info"), "Best", a.optString("text").take(400)); true }
+        },
         "logs.clear" to { _, r -> background(r) { com.best.client.vpn.Logs.clear(activity); true } },
         "singbox.version" to { _, r -> background(r) { if (SingBox.available(activity)) SingBox.version(activity) else "" } },
         "net.metered" to { _, r -> r.send(metered(), null) },
@@ -130,7 +139,12 @@ class NativeBridge(private val activity: MainActivity) : WebViewCompat.WebMessag
     override fun onPostMessage(view: WebView, message: WebMessageCompat, sourceOrigin: Uri, isMainFrame: Boolean, replyProxy: JavaScriptReplyProxy) {
         if (!isMainFrame || sourceOrigin.toString() != WebAssets.ORIGIN || disposed.get()) return
         val data = message.data ?: return
-        if (data.length > MAX_MESSAGE) return
+        if (data.length > MAX_MESSAGE) {
+            // Too big to read: still answered ("TOO_LARGE"), so the page never waits forever.
+            val tooBig = Regex("^\\{\"id\":(\\d{1,9}),").find(data.take(32))?.groupValues?.get(1)?.toIntOrNull()
+            if (tooBig != null) main.post { respond(replyProxy, tooBig, null, "TOO_LARGE") }
+            return
+        }
         val req = try { JSONObject(data) } catch (_: Exception) { return }
         val id = req.optInt("id", -1)
         val name = req.optString("m")
@@ -281,14 +295,22 @@ class NativeBridge(private val activity: MainActivity) : WebViewCompat.WebMessag
         val url = a.getString("url")
         val ua = a.optString("userAgent").ifBlank { "Best/${BuildConfig.VERSION_NAME}" }
         val direct = a.optBoolean("direct", false)
+        // Subscriptions only: the device id for panels that limit devices (Settings → Send a device ID).
+        val hwid = a.optBoolean("hwid", false)
+        val deviceName = a.optString("deviceName").take(80)
         background(r) {
-            val res = Fetcher.get(url, ua, direct)
+            val extra = if (hwid) com.best.client.net.DeviceId.headers(activity, url, deviceName) else emptyMap()
+            val res = Fetcher.get(url, ua, direct, extra)
             JSONObject()
                 .put("status", res.status)
+                .put("device", res.device)
                 .put("body", res.body)
                 .put("userInfo", res.userInfo ?: JSONObject.NULL)
                 .put("title", res.title ?: JSONObject.NULL)
                 .put("updateHours", res.updateHours ?: JSONObject.NULL)
+                .put("supportUrl", res.supportUrl?.take(600) ?: JSONObject.NULL)
+                .put("webPageUrl", res.webPageUrl?.take(600) ?: JSONObject.NULL)
+                .put("announce", res.announce?.take(2000) ?: JSONObject.NULL)
         }
     }
 
@@ -523,6 +545,19 @@ class NativeBridge(private val activity: MainActivity) : WebViewCompat.WebMessag
         r.send(true, null)
     }
 
+    /**
+     * A subscription panel's support or web page link: opened in the browser only when the user taps
+     * it; plain http(s) without a user name or password in it.
+     */
+    private fun openPanelUrl(a: JSONObject, r: Reply) {
+        val url = a.getString("url")
+        require(url.length <= 600) { "BAD_URL" }
+        val uri = Uri.parse(url)
+        require((uri.scheme == "https" || uri.scheme == "http") && !uri.host.isNullOrBlank() && uri.userInfo == null) { "BAD_URL" }
+        activity.startActivity(Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE))
+        r.send(true, null)
+    }
+
     private fun share(a: JSONObject, r: Reply) {
         val text = a.getString("text")
         require(text.length <= MAX_SHARED) { "TOO_LARGE" }
@@ -595,7 +630,8 @@ class NativeBridge(private val activity: MainActivity) : WebViewCompat.WebMessag
 
     companion object {
         private const val TAG = "BestBridge"
-        private const val MAX_MESSAGE = 4 * 1024 * 1024
+        // A whole backup (up to MAX_BACKUP) as JSON text, escaped once more inside the message.
+        private const val MAX_MESSAGE = 120 * 1024 * 1024
         private const val MAX_CONFIG = 2 * 1024 * 1024
         private const val MAX_SHARED = 1024 * 1024
         private const val MAX_APPS = 600

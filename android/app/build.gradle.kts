@@ -39,8 +39,8 @@ android {
         applicationId = "com.best.client"
         minSdk = 24
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.0.0-beta.8"
+        versionCode = 10
+        versionName = "1.0.0"
         buildConfigField("String", "XRAY_LIB", "\"$libv2rayVersion\"")
         // Best's own updates come only from this repository's releases tagged android-v*.
         buildConfigField("String", "SINGBOX", "\"$singboxVersion\"")

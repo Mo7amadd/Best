@@ -93,7 +93,7 @@ object SingBox {
             file.delete()
             throw IllegalStateException("SINGBOX_START")
         }
-        drain(process)
+        drain(process, if (name.startsWith("probe")) null else ctx.applicationContext)
         val running = Running(process, port, user, pass)
         try {
             Local.waitReady(port, START_TIMEOUT_MS) { isAlive(process) }
@@ -106,12 +106,22 @@ object SingBox {
         return running
     }
 
-    /** Reads sing-box's output so it never blocks on a full pipe; logged only in debug builds. */
-    private fun drain(p: Process) {
+    /**
+     * Reads sing-box's output so it never blocks on a full pipe. The connection's sing-box (not the
+     * short ones of the tests) goes to the Logs page; its level is in the line ("ERROR [..] …").
+     */
+    private fun drain(p: Process, logTo: Context?) {
         Thread({
             try {
                 p.inputStream.bufferedReader().useLines { lines ->
-                    lines.forEach { if (BuildConfig.DEBUG) Log.d(TAG, it.take(300)) }
+                    lines.forEach { line ->
+                        if (BuildConfig.DEBUG) Log.d(TAG, line.take(300))
+                        if (logTo != null) {
+                            val m = Regex("^(?:\\S+ \\S+ \\S+ )?(TRACE|DEBUG|INFO|WARN|ERROR|FATAL|PANIC)\\b\\s*(.*)$").find(line)
+                            val level = when (m?.groupValues?.get(1)) { "TRACE", "DEBUG" -> "debug"; "INFO" -> "info"; "WARN" -> "warning"; null -> "info"; else -> "error" }
+                            Logs.add(logTo, level, "sing-box", m?.groupValues?.get(2) ?: line)
+                        }
+                    }
                 }
             } catch (_: Exception) { }
         }, "best-singbox-log").apply { isDaemon = true }.start()

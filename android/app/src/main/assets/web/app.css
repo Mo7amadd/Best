@@ -19,6 +19,7 @@
   --shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 18px 40px rgba(0,0,0,.45);
   --shadow-sm: inset 0 1px 0 rgba(255,255,255,.06), 0 8px 20px rgba(0,0,0,.30);
   --track: rgba(255,255,255,.12); --off: rgba(255,255,255,.16);
+  --pick-card: rgba(255,255,255,.17); --pick-ring: rgba(255,255,255,.26);
   --aurora-a: rgba(61,214,140,.30); --aurora-b: rgba(90,169,255,.16); --aurora-idle: rgba(139,149,163,.14);
   color-scheme: dark;
 }
@@ -28,6 +29,7 @@
   --fair: #9A5F00; --fair-soft: rgba(200,130,0,.13); --bad: #C93A2B; --bad-soft: rgba(201,58,43,.12);
   --glass: rgba(255,255,255,.52); --glass-hi: rgba(255,255,255,.90); --solid: #FFFFFF; --chip: rgba(20,30,50,.06); --line: rgba(20,30,50,.07);
   --sheet: rgba(246,248,251,.84); --group: rgba(255,255,255,.80); --scrim: rgba(30,40,60,.20);
+  --pick-card: rgba(255,255,255,.95); --pick-ring: rgba(20,30,50,.06);
   --rimA: rgba(255,255,255,1); --rimB: rgba(255,255,255,.30); --rimC: rgba(255,255,255,.85);
   --shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 18px 40px rgba(30,45,70,.14);
   --shadow-sm: inset 0 1px 0 rgba(255,255,255,.9), 0 6px 16px rgba(30,45,70,.10);
@@ -113,6 +115,18 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .seg button { position: relative; font-size: 13px; font-weight: 500; color: var(--text3); transition: color .3s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 6px; }
 .seg button.on { color: var(--text); }
 .seg button span { font-weight: 400; color: var(--text3); }
+/* Config tabs: as wide as their names, scrolling sideways inside a still capsule; the chosen one lit. */
+.seg.tabs-wrap { display: block; overflow: hidden; }
+.tabs-scroll { display: flex; gap: 2px; height: 100%; overflow-x: auto; border-radius: 18px; scrollbar-width: none; overscroll-behavior-x: contain; }
+.tabs-scroll::-webkit-scrollbar { display: none; }
+.tabs-scroll { -webkit-mask-image: linear-gradient(to right, transparent, #000 14px, #000 calc(100% - 14px), transparent); mask-image: linear-gradient(to right, transparent, #000 14px, #000 calc(100% - 14px), transparent); }
+.tabs-scroll button { flex: none; display: flex; align-items: center; gap: 5px; max-width: 170px; padding: 0 13px; border-radius: 18px; transition: color .3s, background-color .3s; }
+.tabs-scroll button b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tabs-scroll button span { flex: none; font-size: 11.5px; }
+.tabs-scroll button.on { background: var(--glass-hi); box-shadow: var(--shadow-sm); }
+/* Subscription card: show its configs or not. */
+.sub-show { display: flex; align-items: center; gap: 8px; margin-inline-start: auto; font-size: 12px; color: var(--text2); }
+.card.sub-off .conn-text, .card.sub-off .chip { opacity: .5; }
 .round-btn { position: relative; width: 44px; height: 44px; flex: 0 0 auto; border-radius: 22px; display: flex; align-items: center; justify-content: center; color: var(--fair); }
 
 .list-scroll { position: absolute; inset: 0; overflow-y: auto; scrollbar-width: none; padding: var(--list-top, 300px) 12px calc(var(--bottom, 0px) + 120px);
@@ -125,6 +139,14 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .row-name { font-size: 15px; font-weight: 500; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row-sub { font-size: 12px; color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Two columns (Settings › Config list): small cards, the chosen one lit like the puck. */
+.list.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.list.grid .row { height: auto; min-height: 82px; flex-direction: column; align-items: stretch; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 18px; background: var(--chip); transition: background-color .3s, box-shadow .3s; }
+.list.grid .row.on { background: var(--pick-card); box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--pick-ring); }
+.list.grid .row-name { font-size: 14px; line-height: 1.35; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.list.grid .row-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.list.grid .delay { min-width: 0; }
+.row-tag { flex: none; font-size: 10.5px; letter-spacing: .02em; padding: 2px 7px; border-radius: 7px; background: var(--chip); color: var(--text2); }
 .delay { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 64px; font-size: 12px; color: var(--text2); }
 .dot { width: 6px; height: 6px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
 .dot.fair { background: var(--fair); box-shadow: 0 0 8px var(--fair); }
@@ -146,7 +168,12 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .group { position: relative; border-radius: 22px; display: flex; flex-direction: column; overflow: hidden; }
 .item { display: flex; align-items: center; gap: 12px; min-height: 54px; padding: 10px 16px; border-top: 1px solid var(--line); text-align: start; width: 100%; }
 .item:first-child { border-top: 0; }
-.item-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.item-main { flex: 1 1 140px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+/* A row whose choices don't fit next to the title (large text, narrow phone): they go under it. */
+.item { flex-wrap: wrap; }
+.item > .pick { margin-inline-start: auto; justify-content: flex-end; }
+.item > .pick.even { flex: 1 1 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.pick.even button { padding: 0 6px; }
 .item-main small { font-size: 12px; color: var(--text3); line-height: 1.45; }
 .item .value { font-size: 14px; color: var(--text2); }
 .switch { position: relative; width: 48px; height: 28px; flex: 0 0 auto; border-radius: 14px; background: var(--off); transition: background-color .3s; }
@@ -155,7 +182,23 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .switch.on::after { transform: translateX(20px); }
 [dir="rtl"] .switch.on::after { transform: translateX(-20px); }
 .chip { padding: 4px 10px; border-radius: 12px; background: var(--chip); color: var(--text2); font-size: 12px; }
-.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.sub-actions { display: flex; gap: 4px; margin-inline-start: auto; }
+/* One subscription's tab: its traffic and time left under the tabs (tap: details). */
+.sub-strip { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 10px; padding: 8px 14px; border-radius: 16px; background: var(--chip); color: var(--text2); font-size: 12.5px; text-align: start; }
+.sub-strip-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sub-strip-more { display: flex; color: var(--accent); }
+.usage-bar { position: relative; flex: none; width: 56px; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
+.usage-bar > span { position: absolute; inset-block: 0; inset-inline-start: 0; border-radius: 3px; background: var(--accent); }
+.usage-bar.warn > span { background: var(--fair); }
+.usage-bar.unlimited > span { background: repeating-linear-gradient(-45deg, var(--accent) 0 6px, transparent 6px 10px); opacity: .55; }
+.usage-bar.big { width: 100%; height: 10px; border-radius: 5px; }
+.sub-usage { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.sub-usage-text { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; color: var(--text2); }
+.sub-usage-text b { font-size: 17px; color: var(--text); font-weight: 500; }
+.two-btn { display: flex; gap: 10px; margin: 12px 0; }
+.two-btn .btn { flex: 1; }
+.icon-btn.sm { width: 34px; height: 34px; border-radius: 17px; background: var(--chip); color: var(--text2); }
 .pick { display: flex; gap: 8px; flex-wrap: wrap; }
 .pick button { height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid var(--line); color: var(--text2); font-size: 13px; font-weight: 500; }
 .pick button.on { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
@@ -187,6 +230,9 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .sheet-head { display: flex; align-items: center; gap: 10px; padding: 6px 14px 14px 22px; }
 .sheet-head h2 { margin: 0; flex: 1; font-size: 21px; font-weight: 600; letter-spacing: -.02em; }
 .sheet-body { overflow-y: auto; padding: 0 16px; display: flex; flex-direction: column; gap: 10px; }
+/* A tall sheet scrolls; nothing in it is squeezed (the Save button, the switch rows). */
+.sheet-body > * { flex-shrink: 0; }
+.sheet-body > .btn:last-child { margin-bottom: 4px; }
 .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .tile { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; height: 104px; padding: 14px; border-radius: 22px; background: var(--group); text-align: start; }
 .tile:disabled { opacity: .45; }
@@ -202,6 +248,10 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .pull { position: absolute; inset-inline: 0; top: var(--list-top, 300px); z-index: 1; display: flex; justify-content: center; pointer-events: none; }
 .pull-ball { width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; color: var(--accent); transition: transform .2s; }
 .pull-ball.spin svg { animation: spin .9s linear infinite; }
+.pull-pill { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 18px; font-size: 12.5px; color: var(--text2); white-space: nowrap; }
+.pull-pill .pull-icon { display: flex; color: var(--accent); }
+.pull-pill.spin .pull-icon svg { animation: spin .9s linear infinite; }
+.pull-pill.go { color: var(--accent); font-weight: 500; }
 
 /* ------------------------------------------------------------- option rows, apps, rules */
 .opt { display: flex; align-items: center; gap: 14px; min-height: 62px; padding: 8px 14px; border-radius: 20px; text-align: start; width: 100%; transition: background-color .3s; }
@@ -220,6 +270,7 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .tag.block { background: var(--bad-soft); color: var(--bad); }
 .field textarea { min-height: 110px; padding: 12px 16px; border-radius: 16px; border: 1px solid var(--line); background: var(--group); outline: none; font: 14px/1.5 'JetBrains Mono', monospace; resize: none; }
 .field textarea:focus { border-color: var(--accent); }
+.field textarea.short { min-height: 72px; }
 .field small { padding: 0 8px; font-size: 12px; color: var(--text3); line-height: 1.5; }
 .sheet .group { background: var(--group); }
 
@@ -272,6 +323,12 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .link-btn { align-self: flex-start; color: var(--accent); font-size: 14px; font-weight: 500; padding: 2px 4px; }
 
 /* ------------------------------------------------------------- logs */
+.log-line.lv-error { color: var(--bad); }
+.log-line.lv-warning { color: var(--fair); }
+.log-meta { display: flex; gap: 8px; font-size: 11px; color: var(--text3); margin-bottom: 2px; }
+.log-lv { font-weight: 500; }
+.log-lv.lv-error { color: var(--bad); } .log-lv.lv-warning { color: var(--fair); } .log-lv.lv-info { color: var(--accent); }
+.log-src { color: var(--text2); }
 .log-line { display: block; font: 12px/1.5 'JetBrains Mono', monospace; color: var(--text2); white-space: pre-wrap; word-break: break-all; min-height: 0; padding: 8px 14px; text-align: start; }
 .toolbar .round-btn.plain { flex: 0 0 auto; }
 

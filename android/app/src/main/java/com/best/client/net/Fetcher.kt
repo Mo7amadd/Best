@@ -12,19 +12,29 @@ import java.net.URL
  */
 object Fetcher {
 
-    data class Result(val status: Int, val body: String, val userInfo: String?, val title: String?, val updateHours: String?)
+    /** `device`: what a panel that limits devices said ("limit", "required" or ""), see DeviceId. */
+    data class Result(
+        val status: Int, val body: String, val userInfo: String?, val title: String?, val updateHours: String?, val device: String = "",
+        // The panel's support and web page links and its announcement (headers of Remnawave, Marzban, 3x-ui…).
+        val supportUrl: String? = null, val webPageUrl: String? = null, val announce: String? = null,
+    )
 
     private const val MAX_BYTES = 8 * 1024 * 1024
     private const val TIMEOUT_MS = 25_000
     private const val MAX_REDIRECTS = 5
 
-    /** `direct`: never through the connection (the user's "subscriptions through the proxy" is off). */
-    fun get(url: String, userAgent: String, direct: Boolean = false): Result {
+    /**
+     * `direct`: never through the connection (the user's "subscriptions through the proxy" is off).
+     * `extra`: more request headers (the device id of DeviceId).
+     */
+    fun get(url: String, userAgent: String, direct: Boolean = false, extra: Map<String, String> = emptyMap()): Result {
         var current = parse(url)
+        // The device id (extra) is made for this host: after a redirect to another host it is not sent.
+        val firstHost = current.host.lowercase()
         var redirects = 0
         while (true) {
             val address = checkPublic(current, direct)
-            val res = Http.request("GET", current, mapOf("User-Agent" to userAgent.take(200), "Accept" to "*/*"), timeoutMs = TIMEOUT_MS, connectTo = address, tunnel = !direct)
+            val res = Http.request("GET", current, mapOf("User-Agent" to userAgent.take(200), "Accept" to "*/*") + (if (current.host.lowercase() == firstHost) extra else emptyMap()), timeoutMs = TIMEOUT_MS, connectTo = address, tunnel = !direct)
             res.use {
                 val code = it.status
                 if (code in 300..399) {
@@ -35,7 +45,9 @@ object Fetcher {
                     current = next
                     return@use
                 }
-                if (code !in 200..299) throw FetchException("HTTP_$code")
+                // A panel that limits devices says why it refused (Remnawave: 404 without an id).
+                val device = DeviceId.status { n -> it.header(n) }
+                if (code !in 200..299) throw FetchException(if (device == "limit") "HWID_LIMIT" else if (device == "required") "HWID_REQUIRED" else "HTTP_$code")
                 if (it.length > MAX_BYTES) throw FetchException("TOO_LARGE")
                 return Result(
                     status = code,
@@ -43,6 +55,10 @@ object Fetcher {
                     userInfo = it.header("subscription-userinfo"),
                     title = it.header("profile-title"),
                     updateHours = it.header("profile-update-interval"),
+                    device = device,
+                    supportUrl = it.header("support-url"),
+                    webPageUrl = it.header("profile-web-page-url"),
+                    announce = it.header("announce"),
                 )
             }
         }
@@ -64,6 +80,8 @@ object Fetcher {
     private fun checkPublic(u: URL, direct: Boolean): InetAddress? {
         val host = u.host.removePrefix("[").removeSuffix("]")
         if (host.equals("localhost", ignoreCase = true) || host.endsWith(".localhost", ignoreCase = true)) throw FetchException("LOCAL_ADDRESS")
+        // Development build only: the emulator's way to the computer, for test panels running there.
+        if (com.best.client.BuildConfig.DEBUG && host == "10.0.2.2" && (!Http.tunneled || direct)) return InetAddress.getByName(host)
         val literal = Regex("^[0-9.]+$|:").containsMatchIn(host)
         if (Http.tunneled && !direct && !literal) return null
         val addrs = try { InetAddress.getAllByName(host) } catch (_: Exception) { throw FetchException("DNS_FAILED") }
