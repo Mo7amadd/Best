@@ -156,7 +156,12 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .group { position: relative; border-radius: 22px; display: flex; flex-direction: column; overflow: hidden; }
 .item { display: flex; align-items: center; gap: 12px; min-height: 54px; padding: 10px 16px; border-top: 1px solid var(--line); text-align: start; width: 100%; }
 .item:first-child { border-top: 0; }
-.item-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.item-main { flex: 1 1 140px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+/* A row whose choices don't fit next to the title (large text, narrow phone): they go under it. */
+.item { flex-wrap: wrap; }
+.item > .pick { margin-inline-start: auto; justify-content: flex-end; }
+.item > .pick.even { flex: 1 1 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.pick.even button { padding: 0 6px; }
 .item-main small { font-size: 12px; color: var(--text3); line-height: 1.45; }
 .item .value { font-size: 14px; color: var(--text2); }
 .switch { position: relative; width: 48px; height: 28px; flex: 0 0 auto; border-radius: 14px; background: var(--off); transition: background-color .3s; }
@@ -165,7 +170,9 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .switch.on::after { transform: translateX(20px); }
 [dir="rtl"] .switch.on::after { transform: translateX(-20px); }
 .chip { padding: 4px 10px; border-radius: 12px; background: var(--chip); color: var(--text2); font-size: 12px; }
-.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.sub-actions { display: flex; gap: 4px; margin-inline-start: auto; }
+.icon-btn.sm { width: 34px; height: 34px; border-radius: 17px; background: var(--chip); color: var(--text2); }
 .pick { display: flex; gap: 8px; flex-wrap: wrap; }
 .pick button { height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid var(--line); color: var(--text2); font-size: 13px; font-weight: 500; }
 .pick button.on { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
@@ -212,6 +219,9 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .pull { position: absolute; inset-inline: 0; top: var(--list-top, 300px); z-index: 1; display: flex; justify-content: center; pointer-events: none; }
 .pull-ball { width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; color: var(--accent); transition: transform .2s; }
 .pull-ball.spin svg { animation: spin .9s linear infinite; }
+.pull { flex-direction: column; align-items: center; }
+.pull-text { position: absolute; top: 0; font-size: 12px; color: var(--text3); white-space: nowrap; transition: color .2s; }
+.pull-text.go { color: var(--accent); font-weight: 500; }
 
 /* ------------------------------------------------------------- option rows, apps, rules */
 .opt { display: flex; align-items: center; gap: 14px; min-height: 62px; padding: 8px 14px; border-radius: 20px; text-align: start; width: 100%; transition: background-color .3s; }
@@ -230,6 +240,7 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .tag.block { background: var(--bad-soft); color: var(--bad); }
 .field textarea { min-height: 110px; padding: 12px 16px; border-radius: 16px; border: 1px solid var(--line); background: var(--group); outline: none; font: 14px/1.5 'JetBrains Mono', monospace; resize: none; }
 .field textarea:focus { border-color: var(--accent); }
+.field textarea.short { min-height: 72px; }
 .field small { padding: 0 8px; font-size: 12px; color: var(--text3); line-height: 1.5; }
 .sheet .group { background: var(--group); }
 
@@ -282,6 +293,12 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .link-btn { align-self: flex-start; color: var(--accent); font-size: 14px; font-weight: 500; padding: 2px 4px; }
 
 /* ------------------------------------------------------------- logs */
+.log-line.lv-error { color: var(--bad); }
+.log-line.lv-warning { color: var(--fair); }
+.log-meta { display: flex; gap: 8px; font-size: 11px; color: var(--text3); margin-bottom: 2px; }
+.log-lv { font-weight: 500; }
+.log-lv.lv-error { color: var(--bad); } .log-lv.lv-warning { color: var(--fair); } .log-lv.lv-info { color: var(--accent); }
+.log-src { color: var(--text2); }
 .log-line { display: block; font: 12px/1.5 'JetBrains Mono', monospace; color: var(--text2); white-space: pre-wrap; word-break: break-all; min-height: 0; padding: 8px 14px; text-align: start; }
 .toolbar .round-btn.plain { flex: 0 0 auto; }
 

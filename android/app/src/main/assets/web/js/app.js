@@ -163,6 +163,8 @@ function reconnect() {
 // ------------------------------------------------------------------ helpers
 
 const nameOf = (s) => (s && (s.remark || s.address)) || '';
+/** What the library says ("Lib v40, Xray-core v26.11.9") as the Xray version alone: "26.11.9". */
+const xrayVersion = () => { const v = String(S.info.xray || ''); const m = /Xray-core\s+v?([\w.+-]+)/i.exec(v); return m ? m[1] : v; };
 const protoOf = (s) => PROTO_LABEL[s.protocol] || String(s.protocol || '').toUpperCase();
 // Short protocol tag of the two-column view.
 const SHORT_PROTO = { vless: 'VLESS', vmess: 'VMESS', trojan: 'TROJAN', shadowsocks: 'SS', hysteria2: 'HY2', hysteria: 'HY', tuic: 'TUIC', wireguard: 'WG', anytls: 'ANYTLS', naive: 'NAIVE', socks: 'SOCKS', http: 'HTTP', group: 'GROUP', custom: 'JSON' };
@@ -215,7 +217,13 @@ function ago(ts) {
 }
 
 let toastTimer = 0;
+/** One line on the Logs page (source "Best"): what the user was told, and quiet background work. */
+function logApp(level, text) {
+  call('logs.add', { level, text: String(text || '').slice(0, 400) }).catch(() => {});
+}
+
 function showToast(text, err = false) {
+  if (text !== t('copied')) logApp(err ? 'error' : 'info', text);
   S.toast = { text, err };
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { S.toast = null; render(); }, 2600);
@@ -558,8 +566,11 @@ async function updateSub(sub) {
 }
 
 /** Updates the subscriptions behind the current list (every subscription on "All"). */
+/** The subscriptions the list on screen comes from ("Manual" and an empty list: none). */
+const subsOfTab = () => (S.ui.tab === 'all' ? S.subs : S.subs.filter((x) => x.id === S.ui.tab)).filter((x) => x.enabled !== false);
+
 async function refreshSubs() {
-  const subs = (S.ui.tab === 'all' ? S.subs : S.subs.filter((x) => x.id === S.ui.tab)).filter((x) => x.enabled !== false);
+  const subs = subsOfTab();
   if (!subs.length) return showToast(t('noSubHere'), true);
   S.refreshing = true;
   render();
@@ -578,19 +589,25 @@ async function autoUpdateSubs() {
   const hours = Number(S.settings.subAutoUpdateHours) || 0;
   if (!hours || S.refreshing) return;
   for (const sub of S.subs.filter((x) => x.enabled !== false && Date.now() - (x.updatedAt || 0) > (x.autoUpdateHours || hours) * 3600000)) {
-    try { await downloadSub(sub); await afterSubUpdate(sub); } catch { /* tried again next hour */ }
+    try {
+      await downloadSub(sub);
+      logApp('info', `${sub.name || t('subLink')}: ${t('subsUpdated')}`);
+      await afterSubUpdate(sub);
+    } catch (e) { logApp('warning', `${sub.name || t('subLink')}: ${errText(e.code)}`); /* tried again next hour */ }
   }
 }
 
-// Pull the list down (when it is at the top) to update subscriptions.
-const PULL_GO = 56;
+// Pull the list down (when it is at the top) to update subscriptions. Only where the list comes
+// from a subscription (not "Manual", not an empty list), and only after a long, deliberate pull:
+// the finger has to travel about 230 px, and nothing happens when it goes back up before letting go.
+const PULL_GO = 96;
 let pullFrom = null;
 function pullStart(e) {
-  pullFrom = e.currentTarget.scrollTop <= 0 && !S.refreshing && !S.sheet ? e.touches[0].clientY : null;
+  pullFrom = e.currentTarget.scrollTop <= 0 && !S.refreshing && !S.sheet && subsOfTab().length ? e.touches[0].clientY : null;
 }
 function pullMove(e) {
   if (pullFrom === null) return;
-  const d = Math.max(0, Math.min(220, e.touches[0].clientY - pullFrom)) * 0.5;
+  const d = Math.round(Math.max(0, Math.min(300, e.touches[0].clientY - pullFrom)) * 0.42);
   if (d !== S.pull) { S.pull = d; render(); }
 }
 function pullEnd() {
@@ -778,7 +795,9 @@ function viewConfigs() {
       glass('span', `pull-ball sm ${S.refreshing ? 'spin' : ''}`, {
         role: 'status', 'aria-label': S.refreshing ? t('updating') : S.pull >= PULL_GO ? t('pullUpdate') : t('pulling'),
         style: { transform: `translateY(${S.refreshing ? 12 : S.pull - 30}px) rotate(${S.refreshing ? 0 : S.pull * 4}deg)`, opacity: String(S.refreshing ? 1 : Math.min(1, S.pull / PULL_GO)) },
-      }, icon('refresh', 19, 2))) : null,
+      }, icon('refresh', 19, 2)),
+      S.refreshing || S.pull < 24 ? null : h('span', { class: `pull-text ${S.pull >= PULL_GO ? 'go' : ''}`, style: { transform: `translateY(${S.pull + 18}px)` } },
+        S.pull >= PULL_GO ? t('pullUpdate') : t('pulling'))) : null,
     h('div', { class: 'list-scroll', onTouchstart: pullStart, onTouchmove: pullMove, onTouchend: pullEnd, onTouchcancel: pullEnd },
       list.length
         ? h('div', { class: `list ${grid ? 'grid' : ''}`, style: { transform: `translateY(${S.refreshing ? 52 : S.pull}px)`, transition: S.pull ? 'none' : 'transform .3s' } },
@@ -844,14 +863,15 @@ function viewSubs() {
           h('span', { class: 'conn-name' }, sub.name || t('subLink')),
           info.total ? h('span', { class: 'conn-detail' }, t('usedOf', { used: bytes(used), total: bytes(info.total) })) : null,
           days !== null ? h('span', { class: 'conn-detail', style: warn ? { color: 'var(--fair)' } : null }, days > 0 ? t('daysLeft', { n: num(days) }) : t('expired')) : null),
-        h('button', { class: 'icon-btn', 'aria-label': t('update'), onClick: () => updateSub(sub), disabled: S.busy[sub.id] },
-          S.busy[sub.id] ? h('span', { class: 'mini-spin' }) : icon('refresh', 18, 1.9))),
+        h('span', { class: 'sub-actions' },
+          h('button', { class: 'icon-btn sm', 'aria-label': t('update'), onClick: () => updateSub(sub), disabled: S.busy[sub.id] },
+            S.busy[sub.id] ? h('span', { class: 'mini-spin' }) : icon('refresh', 17, 1.9)),
+          h('button', { class: 'icon-btn sm', 'aria-label': t('edit'), onClick: () => openSheet({ type: 'editSub', id: sub.id, draft: { ...sub, moreUrls: (sub.moreUrls || []).join('\n') } }) }, icon('edit', 17, 1.9)),
+          h('button', { class: 'icon-btn sm', 'aria-label': t('delete'), onClick: () => openSheet({ type: 'removeSub', id: sub.id }) }, icon('trash', 17, 1.9)))),
       h('div', { class: 'chips' },
         h('span', { class: 'chip' }, t('configsN', { n: num(count) })),
         h('span', { class: 'chip' }, t('subUpdated', { when: ago(sub.updatedAt) })),
-        h('span', { style: { flex: '1' } }),
-        h('button', { class: 'chip', onClick: () => openSheet({ type: 'editSub', id: sub.id, draft: { ...sub, moreUrls: (sub.moreUrls || []).join('\n') } }) }, t('edit')),
-        h('button', { class: 'chip', onClick: () => openSheet({ type: 'removeSub', id: sub.id }) }, t('delete'))),
+      ),
       sub.notice ? h('div', { class: 'note warn' }, icon('info', 18, 1.9), h('span', null, sub.notice)) : null);
   });
   return h('div', { class: 'page', 'data-key': 'subs' },
@@ -1046,11 +1066,12 @@ function viewSettings() {
         h('button', { class: 'icon-btn', 'aria-label': t('copyLink'), onClick: async () => { await call('clip.write', { text: `${S.settings.lanUser}:${S.settings.lanPass}`, sensitive: true }).catch(() => {}); showToast(t('copied')); } }, icon('copy', 18, 1.9))) : null,
       h('button', { class: 'item', onClick: () => setUi({ allowTasker: !S.ui.allowTasker }) },
         h('div', { class: 'item-main' }, t('allowTasker'), h('small', null, t('allowTaskerHint'))), sw(S.ui.allowTasker)),
-      h('div', { class: 'item' }, h('div', { class: 'item-main' }, t('autoUpdate')),
-        h('div', { class: 'pick' }, [0, 6, 12, 24].map((n) => h('button', {
+      h('div', { class: 'item' }, h('div', { class: 'item-main' }, t('autoUpdate'))),
+      h('div', { class: 'item', style: { borderTop: '0', paddingTop: '0' } },
+        h('div', { class: 'pick even' }, [0, 6, 12, 24].map((n) => h('button', {
           class: Number(S.settings.subAutoUpdateHours) === n ? 'on' : '', 'data-key': `au${n}`,
           onClick: () => { setS({ subAutoUpdateHours: n }); autoUpdateSubs(); },
-        }, n ? t('everyH', { n: num(n) }) : t('off')))))),
+        }, n ? t('hoursShort', { n: num(n) }) : t('off')))))),
     glass('div', 'group', { style: { marginTop: '10px' } },
       h('button', { class: 'item', onClick: () => { S.page = 'advanced'; render(); } }, icon('settings', 19, 1.8),
         h('div', { class: 'item-main' }, t('adv'), h('small', null, t('advHint'))), chevron()),
@@ -1067,7 +1088,7 @@ function viewSettings() {
     h('div', { class: 'section-label' }, t('about')),
     glass('div', 'group', null,
       h('div', { class: 'item' }, h('div', { class: 'item-main' }, 'Best'), h('span', { class: 'value mono ltr' }, S.info.version || '')),
-      h('div', { class: 'item' }, h('div', { class: 'item-main' }, 'Xray'), h('span', { class: 'value mono ltr' }, S.info.xray || '')),
+      h('div', { class: 'item' }, h('div', { class: 'item-main' }, 'Xray'), h('span', { class: 'value mono ltr' }, xrayVersion())),
       h('div', { class: 'item' }, h('div', { class: 'item-main' }, 'sing-box'), h('span', { class: 'value mono ltr' }, S.info.singbox || '—')),
       h('button', { class: 'item', onClick: () => openSheet({ type: 'licenses' }) }, icon('info', 19, 1.8),
         h('div', { class: 'item-main' }, t('licenses'), h('small', null, t('licensesHint'))), chevron())));
@@ -1226,7 +1247,7 @@ function viewSheet() {
     const d = sh.draft;
     title = t('subEdit');
     const input = (k, label, opts = {}) => h('div', { class: 'field' }, h('label', null, label),
-      h(opts.area ? 'textarea' : 'input', { class: opts.plain ? '' : 'ltr', type: 'text', autocomplete: 'off', spellcheck: 'false', autocapitalize: 'off', placeholder: opts.placeholder || '', value: d[k] || '', 'data-key': `es-${k}`, onInput: (e) => { d[k] = e.target.value; } }),
+      h(opts.area ? 'textarea' : 'input', { class: `${opts.plain ? '' : 'ltr'} ${opts.short ? 'short' : ''}`, type: 'text', autocomplete: 'off', spellcheck: 'false', autocapitalize: 'off', placeholder: opts.placeholder || '', value: d[k] || '', 'data-key': `es-${k}`, onInput: (e) => { d[k] = e.target.value; } }),
       opts.hint ? h('small', null, opts.hint) : null);
     const fronts = S.servers.filter((x) => x.protocol !== 'group' && x.protocol !== 'custom' && x.subId !== sub.id);
     body = [
@@ -1235,8 +1256,9 @@ function viewSheet() {
           h('div', { class: 'item-main' }, t('subEnabled')), switchEl(d.enabled !== false))),
       input('name', t('subName'), { plain: true }),
       input('url', t('subUrl'), { placeholder: 'https://' }),
-      input('moreUrls', t('subMore'), { area: true, hint: t('subMoreHint') }),
-      h('div', { class: 'two' }, input('filter', t('subFilter'), { hint: t('subFilterHint') }), input('exclude', t('subExclude'))),
+      input('moreUrls', t('subMore'), { area: true, short: true, hint: t('subMoreHint') }),
+      input('filter', t('subFilter'), { hint: t('subFilterHint') }),
+      input('exclude', t('subExclude')),
       input('userAgent', t('subUaOwn'), { placeholder: S.settings.subUserAgent || 'Best' }),
       h('div', { class: 'field' }, h('label', null, t('subVia')),
         h('select', { 'data-key': 'es-via', onChange: (e) => { d.via = e.target.value; } },
@@ -1298,7 +1320,7 @@ function view() {
   ];
 }
 
-const ctx = { S, render: () => render(), save, showToast, glass, switchEl, ago, reconnect, applyToConnection, openSheet, closeSheet, cleanServers, cleanSubs, applyLook: () => applyLook(), nameOf };
+const ctx = { S, render: () => render(), save, showToast, glass, switchEl, ago, reconnect, applyToConnection, openSheet, closeSheet, cleanServers, cleanSubs, applyLook: () => applyLook(), nameOf, xrayVersion };
 const editor = createEditor(ctx);
 const updates = createUpdates(ctx);
 const more = createMore(ctx);

@@ -310,7 +310,7 @@ export function createUpdates(ctx) {
           h('span', { class: 'logo big rim' }, 'b'),
           h('div', { class: 'conn-text' },
             h('span', { class: 'conn-name' }, 'Best'),
-            h('span', { class: 'conn-detail mono ltr', style: { textAlign: 'start' } }, `${S.info.version || ''} · Xray ${S.info.xray || ''}`))),
+            h('span', { class: 'conn-detail mono ltr', style: { textAlign: 'start' } }, `${S.info.version || ''} · Xray ${ctx.xrayVersion()}`))),
         status,
         action,
         extra,

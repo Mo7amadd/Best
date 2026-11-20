@@ -13,7 +13,9 @@ const LOG_LEVELS = ['warning', 'error', 'info', 'debug', 'none'];
 
 export function createMore(ctx) {
   const { S, render, save, showToast, glass, switchEl, openSheet, closeSheet } = ctx;
-  const L = { kind: 'access', text: '', timer: 0, loading: false };
+  // Logs page: "all" (Xray's log + what Best and sing-box did, one list, like Best for Windows) and
+  // "access" (connections). `level` / `query` filter the first.
+  const L = { kind: 'all', text: '', app: '', timer: 0, loading: false, level: 'all', query: '' };
 
   // ---------------------------------------------------------------- shared bits
 
@@ -227,7 +229,8 @@ export function createMore(ctx) {
   async function readLogs() {
     if (S.page !== 'logs' || L.loading) return;
     L.loading = true;
-    try { L.text = (await call('logs.read', { kind: L.kind })) || ''; } catch { L.text = ''; }
+    try { L.text = (await call('logs.read', { kind: L.kind === 'all' ? 'error' : 'access' })) || ''; } catch { L.text = ''; }
+    if (L.kind === 'all') { try { L.app = (await call('logs.read', { kind: 'app' })) || ''; } catch { L.app = ''; } }
     L.loading = false;
     render();
   }
@@ -240,10 +243,49 @@ export function createMore(ctx) {
 
   const ACCESS = /^(\d{4}\/\d\d\/\d\d) (\d\d:\d\d:\d\d)\S* from (\S+) (accepted|rejected) (?:(tcp|udp):)?(\S+?)(?::(\d+))? \[([^\]]*)\]/;
 
+  // "2026/11/19 12:00:00.123456 [Warning] Best: text" (Xray writes UTC; shown in the phone's time).
+  const LINE = /^(\d{4})\/(\d\d)\/(\d\d) (\d\d:\d\d:\d\d)(\.\d+)? \[(\w+)\] (?:([\w.-]+): )?(.*)$/;
+  const LV = { debug: 'debug', info: 'info', warning: 'warning', error: 'error' };
+  function parseLine(line, fallbackSource) {
+    const m = LINE.exec(line);
+    if (!m) return { key: '', time: '', level: 'info', source: fallbackSource, text: line };
+    const when = new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}Z`);
+    const time = Number.isNaN(when.getTime()) ? m[4] : when.toLocaleTimeString('en-GB', { hour12: false });
+    const fromApp = fallbackSource !== 'Xray';
+    // Xray's lines: "[Warning] core: …" — the part before ":" is its module, not the source.
+    const source = fromApp ? (m[7] || fallbackSource) : 'Xray';
+    const text = fromApp || !m[7] ? m[8] : `${m[7]}: ${m[8]}`;
+    return { key: `${m[1]}${m[2]}${m[3]}${m[4]}${(m[5] || '.0').padEnd(8, '0')}`, time, level: LV[m[6].toLowerCase()] || 'info', source, text };
+  }
+  function allLines() {
+    const xray = L.text.split('\n').filter(Boolean).map((l) => parseLine(l, 'Xray'));
+    const app = L.app.split('\n').filter(Boolean).map((l) => parseLine(l, 'Best'));
+    const q = L.query.trim().toLowerCase();
+    return [...xray, ...app]
+      .sort((a, b) => (a.key < b.key ? 1 : a.key > b.key ? -1 : 0))
+      .filter((e) => (L.level === 'warning' ? e.level === 'warning' || e.level === 'error'
+        : L.level === 'error' ? e.level === 'error'
+          : L.level === 'best' ? e.source !== 'Xray' : true))
+      .filter((e) => !q || `${e.source} ${e.text}`.toLowerCase().includes(q))
+      .slice(0, 500);
+  }
+
   function viewLogs() {
-    const lines = L.text.split('\n').filter(Boolean).reverse().slice(0, 400);
+    const lines = L.kind === 'all' ? [] : L.text.split('\n').filter(Boolean).reverse().slice(0, 400);
+    const entries = L.kind === 'all' ? allLines() : [];
     let content;
-    if (L.kind === 'access' && !S.ui.logConnections && !lines.length) {
+    if (L.kind === 'all') {
+      const filters = [['all', t('lf_all')], ['warning', t('lf_warn')], ['error', t('lf_err')], ['best', 'Best']];
+      content = [
+        h('div', { class: 'pick', style: { marginBottom: '10px' } }, filters.map(([k, label]) => h('button', { class: L.level === k ? 'on' : '', 'data-key': `lf-${k}`, onClick: () => { L.level = k; render(); } }, label))),
+        h('div', { class: 'field', style: { marginBottom: '10px' } }, h('input', { type: 'search', placeholder: t('logs_search'), value: L.query, 'data-key': 'log-q', autocomplete: 'off', spellcheck: 'false', onInput: (e) => { L.query = e.target.value; render(); } })),
+        entries.length
+          ? glass('div', 'group', null, entries.map((e, i) => h('div', { class: `item log-line ltr lv-${e.level}`, 'data-key': `a${i}` },
+            h('span', { class: 'log-meta' }, h('span', null, e.time), h('span', { class: `log-lv lv-${e.level}` }, { error: 'ERR', warning: 'WARN', debug: 'DBG' }[e.level] || 'INFO'), h('span', { class: 'log-src' }, e.source)),
+            h('span', null, e.text.slice(0, 600)))))
+          : h('div', { class: 'empty' }, h('span', { class: 'empty-icon' }, icon('info', 28, 1.7)), h('b', null, t('logs_empty'))),
+      ];
+    } else if (L.kind === 'access' && !S.ui.logConnections && !lines.length) {
       content = h('div', { class: 'note' }, icon('info', 18, 1.9), h('span', null, t('logs_connOff')));
     } else if (!lines.length) {
       content = h('div', { class: 'empty' }, h('span', { class: 'empty-icon' }, icon('info', 28, 1.7)), h('b', null, t('logs_empty')));
@@ -272,7 +314,7 @@ export function createMore(ctx) {
       });
       content = glass('div', 'group', null, lines.map((line, i) => h('div', { class: 'item log-line ltr', 'data-key': `l${i}` }, local(line).slice(0, 600))));
     }
-    const tabs = [['access', t('logs_conn')], ['error', t('logs_err')]];
+    const tabs = [['all', t('logs_all')], ['access', t('logs_conn')]];
     const i = tabs.findIndex(([k]) => k === L.kind);
     return h('div', { class: 'page editor', 'data-key': 'logs' },
       pageHead(t('logs')),
@@ -280,8 +322,11 @@ export function createMore(ctx) {
         glass('div', 'seg sm', null,
           h('span', { class: 'seg-ind', style: { width: 'calc((100% - 8px) / 2)', transform: `translateX(${(isRtl() ? -1 : 1) * i * 100}%)` } }),
           tabs.map(([k, label]) => h('button', { class: L.kind === k ? 'on' : '', 'data-key': k, onClick: () => { L.kind = k; L.text = ''; readLogs(); } }, label))),
-        glass('button', 'round-btn sm plain', { 'aria-label': t('logs_copy'), onClick: async () => { await call('clip.write', { text: L.text.slice(-200000), sensitive: true }).catch(() => {}); showToast(t('copied')); } }, icon('copy', 18, 1.9)),
-        glass('button', 'round-btn sm plain', { 'aria-label': t('logs_clear'), onClick: async () => { await call('logs.clear').catch(() => {}); L.text = ''; render(); } }, icon('trash', 18, 1.9))),
+        glass('button', 'round-btn sm plain', { 'aria-label': t('logs_copy'), onClick: async () => {
+          const text = L.kind === 'all' ? allLines().reverse().map((e) => `${e.time} [${e.level}] ${e.source}: ${e.text}`).join('\n') : L.text;
+          await call('clip.write', { text: text.slice(-200000), sensitive: true }).catch(() => {}); showToast(t('copied'));
+        } }, icon('copy', 18, 1.9)),
+        glass('button', 'round-btn sm plain', { 'aria-label': t('logs_clear'), onClick: async () => { await call('logs.clear').catch(() => {}); L.text = ''; L.app = ''; render(); } }, icon('trash', 18, 1.9))),
       content);
   }
 

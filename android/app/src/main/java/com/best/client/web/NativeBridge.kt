@@ -107,7 +107,15 @@ class NativeBridge(private val activity: MainActivity) : WebViewCompat.WebMessag
         "dav.put" to { a, r -> val d = dav(a); val name = a.getString("name"); val text = a.getString("text"); background(r) { d.put(name, text); true } },
         "dav.list" to { a, r -> val d = dav(a); background(r) { JSONArray(d.list().map { JSONObject().put("name", it.first).put("modified", it.second) }) } },
         "dav.get" to { a, r -> val d = dav(a); val name = a.getString("name"); background(r) { d.get(name) } },
-        "logs.read" to { a, r -> val access = a.optString("kind") == "access"; background(r) { com.best.client.vpn.Logs.tail(if (access) com.best.client.vpn.Logs.access(activity) else com.best.client.vpn.Logs.error(activity)) } },
+        "logs.read" to { a, r ->
+            val L = com.best.client.vpn.Logs
+            val file = when (a.optString("kind")) { "access" -> L.access(activity); "app" -> L.app(activity); else -> L.error(activity) }
+            background(r) { L.tail(file) }
+        },
+        // What the page itself did (subscriptions, tests, errors shown to the user), for the Logs page.
+        "logs.add" to { a, r ->
+            background(r) { com.best.client.vpn.Logs.add(activity, a.optString("level", "info"), "Best", a.optString("text").take(400)); true }
+        },
         "logs.clear" to { _, r -> background(r) { com.best.client.vpn.Logs.clear(activity); true } },
         "singbox.version" to { _, r -> background(r) { if (SingBox.available(activity)) SingBox.version(activity) else "" } },
         "net.metered" to { _, r -> r.send(metered(), null) },

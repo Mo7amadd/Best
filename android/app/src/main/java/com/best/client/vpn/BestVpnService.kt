@@ -83,6 +83,7 @@ class BestVpnService : VpnService() {
         teardown()
         session = s
         VpnState.set(VpnState.Snapshot(VpnState.Phase.CONNECTING, s.name))
+        Logs.add(this, "info", "Best", "Connecting: ${s.name}${if (s.singbox != null) " (Xray + sing-box)" else ""}${if (s.mode == "proxy") ", proxy only" else ""}")
         try {
             GeoFiles.ensure(this)
             // "Proxy only": no VPN interface; apps that have proxy settings use the local ports.
@@ -109,24 +110,30 @@ class BestVpnService : VpnService() {
             downTotal = 0
             VpnState.setTraffic(VpnState.Traffic(0, 0, 0, 0))
             VpnState.set(VpnState.Snapshot(VpnState.Phase.CONNECTED, s.name, since = SystemClock.elapsedRealtime()))
+            Logs.add(this, "info", "Best", "Connected: ${s.name}")
             main.post { goForeground(s, connected = true, detail = null) }
             startTicker()
         } catch (e: Exception) {
             Log.w(TAG, "start failed", e)
             teardown()
+            Logs.add(this, "error", "Best", "Could not connect (${errorCode(e)}): ${(e.message ?: e.javaClass.simpleName).take(200)}")
             VpnState.set(VpnState.Snapshot(VpnState.Phase.ERROR, s.name, error = errorCode(e)))
             main.post { leaveForeground() }
         }
     }
 
     private fun failed(name: String, code: String) {
+        Logs.add(this, "error", "Best", "Connection stopped ($code): $name")
         teardown()
         VpnState.set(VpnState.Snapshot(VpnState.Phase.ERROR, name, error = code))
         main.post { leaveForeground() }
     }
 
     private fun stopVpn() {
-        if (core != null || tun != null) VpnState.set(VpnState.Snapshot(VpnState.Phase.STOPPING, session?.name ?: ""))
+        if (core != null || tun != null) {
+            VpnState.set(VpnState.Snapshot(VpnState.Phase.STOPPING, session?.name ?: ""))
+            Logs.add(this, "info", "Best", "Disconnected")
+        }
         teardown()
         VpnState.set(VpnState.Snapshot(VpnState.Phase.IDLE))
         main.post { leaveForeground() }
@@ -170,7 +177,7 @@ class BestVpnService : VpnService() {
 
     /** Xray's logs go to Best's private folder (see Logs); emptied at each connection. */
     private fun withLogs(config: String, s: Session): String {
-        Logs.clear(this)
+        Logs.cut(Logs.access(this))
         val json = org.json.JSONObject(config)
         val log = json.optJSONObject("log") ?: org.json.JSONObject()
         val level = log.optString("loglevel", "warning").takeIf { it in LEVELS } ?: "warning"
