@@ -169,7 +169,9 @@ class MainActivity : ComponentActivity() {
             intent?.action == ACTION_SCAN -> bridge?.onLink("scan:")
             // best://install-sub?url=… (and the same links made for v2rayNG): the page asks first.
             intent?.action == Intent.ACTION_VIEW && intent.data?.scheme in LINK_SCHEMES -> bridge?.onLink(intent.dataString ?: return)
-            intent?.action == Intent.ACTION_SEND && intent.type == "text/plain" -> bridge?.onShared(intent.getStringExtra(Intent.EXTRA_TEXT) ?: return)
+            // Any app can send this; a broken extra must not bring Best down (the page asks before adding).
+            intent?.action == Intent.ACTION_SEND && intent.type == "text/plain" ->
+                bridge?.onShared((try { intent.getStringExtra(Intent.EXTRA_TEXT) } catch (_: Exception) { null })?.take(200_000) ?: return)
             else -> return
         }
         setIntent(Intent(this, MainActivity::class.java))

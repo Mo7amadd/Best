@@ -49,6 +49,13 @@ class BestVpnService : VpnService() {
     private var downTotal = 0L
     private var ticks = 0
 
+    /**
+     * Counts start requests (main thread). A stop leaves the foreground and ends the service later,
+     * on the main thread; if a new start arrived in between (a quick tap while disconnecting), that
+     * late stop would end the new connection too, so it is skipped when this number moved on.
+     */
+    @Volatile private var starts = 0
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             worker.execute { stopVpn() }
@@ -61,6 +68,7 @@ class BestVpnService : VpnService() {
             stopSelf()
             return START_NOT_STICKY
         }
+        starts++
         goForeground(s, connected = false, detail = null)
         worker.execute { startVpn(s) }
         return START_NOT_STICKY
@@ -72,7 +80,12 @@ class BestVpnService : VpnService() {
     }
 
     override fun onDestroy() {
-        worker.execute { teardown() }
+        worker.execute {
+            val wasUp = core != null || tun != null
+            teardown()
+            // Never left showing "connected" with no tunnel.
+            if (wasUp || VpnState.current.phase != VpnState.Phase.ERROR) VpnState.set(VpnState.Snapshot(VpnState.Phase.IDLE))
+        }
         worker.shutdown()
         super.onDestroy()
     }
@@ -115,18 +128,20 @@ class BestVpnService : VpnService() {
             startTicker()
         } catch (e: Exception) {
             Log.w(TAG, "start failed", e)
+            val asked = starts
             teardown()
             Logs.add(this, "error", "Best", "Could not connect (${errorCode(e)}): ${(e.message ?: e.javaClass.simpleName).take(200)}")
             VpnState.set(VpnState.Snapshot(VpnState.Phase.ERROR, s.name, error = errorCode(e)))
-            main.post { leaveForeground() }
+            main.post { if (starts == asked) leaveForeground() }
         }
     }
 
     private fun failed(name: String, code: String) {
         Logs.add(this, "error", "Best", "Connection stopped ($code): $name")
+        val asked = starts
         teardown()
         VpnState.set(VpnState.Snapshot(VpnState.Phase.ERROR, name, error = code))
-        main.post { leaveForeground() }
+        main.post { if (starts == asked) leaveForeground() }
     }
 
     private fun stopVpn() {
@@ -134,9 +149,10 @@ class BestVpnService : VpnService() {
             VpnState.set(VpnState.Snapshot(VpnState.Phase.STOPPING, session?.name ?: ""))
             Logs.add(this, "info", "Best", "Disconnected")
         }
+        val asked = starts
         teardown()
         VpnState.set(VpnState.Snapshot(VpnState.Phase.IDLE))
-        main.post { leaveForeground() }
+        main.post { if (starts == asked) leaveForeground() }
     }
 
     /**
@@ -165,9 +181,14 @@ class BestVpnService : VpnService() {
         val hasBalancer = balancers != null && (0 until balancers.length()).any { balancers.optJSONObject(it)?.optString("tag") == "proxy" }
         val outs = json.optJSONArray("outbounds")
         val hasProxy = outs != null && (0 until outs.length()).any { outs.optJSONObject(it)?.optString("tag") == "proxy" }
-        if (hasBalancer || hasProxy) {
+        // A full JSON config without a "proxy" outbound: its first outbound, named here if it has no
+        // name, so the config's own rules (a "private addresses direct" rule, say) never apply to Best's requests.
+        val first = outs?.optJSONObject(0)
+        if (!hasBalancer && !hasProxy && first != null && first.optString("tag").isEmpty()) first.put("tag", "best-first")
+        val target = if (hasBalancer || hasProxy) "proxy" else first?.optString("tag").orEmpty()
+        if (target.isNotEmpty()) {
             val rule = org.json.JSONObject().put("type", "field").put("inboundTag", org.json.JSONArray().put(FETCH_TAG))
-            if (hasBalancer) rule.put("balancerTag", "proxy") else rule.put("outboundTag", "proxy")
+            if (hasBalancer) rule.put("balancerTag", "proxy") else rule.put("outboundTag", target)
             val next = org.json.JSONArray().put(rule)
             for (i in 0 until rules.length()) next.put(rules.get(i))
             routing.put("rules", next)

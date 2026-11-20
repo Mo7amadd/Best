@@ -99,8 +99,8 @@ export function createMore(ctx) {
 
   async function backupText(password) {
     const subs = S.subs.map((s) => ({ ...s, lastUpdate: s.updatedAt || 0 }));
-    // The WebDAV password stays on this phone (a backup may be handed to someone else).
-    const settings = { ...S.settings, webdavPass: '' };
+    // The WebDAV and LAN-sharing passwords stay on this phone (a backup may be handed to someone else).
+    const settings = { ...S.settings, webdavPass: '', lanUser: '', lanPass: '' };
     const plain = JSON.stringify({ app: 'best', version: 1, settings, routing: S.routing, servers: S.servers, subs, activeId: S.ui.selected });
     return JSON.stringify(await encryptBackup(plain, password));
   }
@@ -170,7 +170,8 @@ export function createMore(ctx) {
     // Backups never hold the WebDAV password: the one on this phone stays when the server is the same.
     const sameDav = Boolean(incoming.webdavUrl) && incoming.webdavUrl === S.settings.webdavUrl && (incoming.webdavUser || '') === (S.settings.webdavUser || '');
     const dav = !incoming.webdavUrl ? keepDav : { webdavPass: sameDav ? S.settings.webdavPass : '' };
-    S.settings = Core.settings.sanitizeSettings({ ...incoming, tun: false, allowLan: false, ...dav });
+    // LAN sharing: off, and this phone's own user name and password (never someone else's from a backup).
+    S.settings = Core.settings.sanitizeSettings({ ...incoming, tun: false, allowLan: false, ...dav, lanUser: S.settings.lanUser, lanPass: S.settings.lanPass });
     S.routing = Core.settings.sanitizeRouting(data.routing || {});
     S.servers = ctx.cleanServers(data.servers);
     S.subs = ctx.cleanSubs(data.subs);

@@ -29,10 +29,12 @@ object Fetcher {
      */
     fun get(url: String, userAgent: String, direct: Boolean = false, extra: Map<String, String> = emptyMap()): Result {
         var current = parse(url)
+        // The device id (extra) is made for this host: after a redirect to another host it is not sent.
+        val firstHost = current.host.lowercase()
         var redirects = 0
         while (true) {
             val address = checkPublic(current, direct)
-            val res = Http.request("GET", current, mapOf("User-Agent" to userAgent.take(200), "Accept" to "*/*") + extra, timeoutMs = TIMEOUT_MS, connectTo = address, tunnel = !direct)
+            val res = Http.request("GET", current, mapOf("User-Agent" to userAgent.take(200), "Accept" to "*/*") + (if (current.host.lowercase() == firstHost) extra else emptyMap()), timeoutMs = TIMEOUT_MS, connectTo = address, tunnel = !direct)
             res.use {
                 val code = it.status
                 if (code in 300..399) {

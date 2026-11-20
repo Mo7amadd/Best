@@ -2,8 +2,11 @@
 // Android configs, built on the Windows app's xray-config.js so both apps connect the same way.
 // Differences on Android:
 //  - Traffic arrives from the VPN interface (Xray's own "tun" inbound reading the fd that
-//    VpnService gives), never from local SOCKS / HTTP ports: on a phone every app can reach
-//    127.0.0.1, so Best opens no such port at all.
+//    VpnService gives), not from local SOCKS / HTTP ports: on a phone every app can reach
+//    127.0.0.1, so in VPN mode apps get no such port. Only Best's own ports exist there (its
+//    requests, tests: random user and password) and, for an unencrypted VLESS / Trojan server, a
+//    local forwarder to that one server. "Proxy only" opens SOCKS / HTTP on 127.0.0.1 because the
+//    user chose that, for apps with their own proxy settings.
 //  - DNS queries from apps (port 53 into the tunnel) are answered by Xray's DNS, with the same
 //    servers and routing as everything else, so nothing leaks to the network's resolver.
 //  - IPv6: the tunnel always takes IPv6 too (otherwise it would bypass the VPN); when IPv6 is off

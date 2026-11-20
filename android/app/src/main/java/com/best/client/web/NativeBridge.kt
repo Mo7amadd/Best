@@ -139,7 +139,12 @@ class NativeBridge(private val activity: MainActivity) : WebViewCompat.WebMessag
     override fun onPostMessage(view: WebView, message: WebMessageCompat, sourceOrigin: Uri, isMainFrame: Boolean, replyProxy: JavaScriptReplyProxy) {
         if (!isMainFrame || sourceOrigin.toString() != WebAssets.ORIGIN || disposed.get()) return
         val data = message.data ?: return
-        if (data.length > MAX_MESSAGE) return
+        if (data.length > MAX_MESSAGE) {
+            // Too big to read: still answered ("TOO_LARGE"), so the page never waits forever.
+            val tooBig = Regex("^\\{\"id\":(\\d{1,9}),").find(data.take(32))?.groupValues?.get(1)?.toIntOrNull()
+            if (tooBig != null) main.post { respond(replyProxy, tooBig, null, "TOO_LARGE") }
+            return
+        }
         val req = try { JSONObject(data) } catch (_: Exception) { return }
         val id = req.optInt("id", -1)
         val name = req.optString("m")
@@ -625,7 +630,8 @@ class NativeBridge(private val activity: MainActivity) : WebViewCompat.WebMessag
 
     companion object {
         private const val TAG = "BestBridge"
-        private const val MAX_MESSAGE = 4 * 1024 * 1024
+        // A whole backup (up to MAX_BACKUP) as JSON text, escaped once more inside the message.
+        private const val MAX_MESSAGE = 120 * 1024 * 1024
         private const val MAX_CONFIG = 2 * 1024 * 1024
         private const val MAX_SHARED = 1024 * 1024
         private const val MAX_APPS = 600

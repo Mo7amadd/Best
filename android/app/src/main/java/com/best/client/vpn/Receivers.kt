@@ -91,7 +91,9 @@ class ShortcutActivity : Activity() {
 class TaskerReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
         if (intent.action != ACTION_FIRE || !uiFlag(ctx, "allowTasker")) return
-        when (intent.getBundleExtra(EXTRA_BUNDLE)?.getString(KEY_ACTION) ?: intent.getStringExtra(KEY_ACTION)) {
+        // Extras from another app: a broken one must not bring Best (and its VPN) down.
+        val action = try { intent.getBundleExtra(EXTRA_BUNDLE)?.getString(KEY_ACTION) ?: intent.getStringExtra(KEY_ACTION) } catch (_: Exception) { null }
+        when (action) {
             "start" -> VpnToggle.start(ctx)
             "stop" -> VpnToggle.stop(ctx)
             "toggle" -> VpnToggle.toggle(ctx)

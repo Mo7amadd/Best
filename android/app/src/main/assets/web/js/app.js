@@ -304,6 +304,7 @@ async function serverIps(server) {
 
 function toggleConnect() {
   const p = S.vpn.phase;
+  if (p === 'stopping') return; // still disconnecting: the next tap connects
   if (p === 'connected' || p === 'connecting') call('vpn.stop').catch(() => {});
   else connect();
 }
@@ -461,6 +462,21 @@ async function importText(text) {
   save('servers');
   save('ui');
   showToast(fresh.length === 1 ? t('added1') : t('addedN', { n: num(fresh.length) }));
+}
+
+/**
+ * Text another app shared with Best: any app can send it, so nothing is added before the user
+ * says yes (the same question as a best:// link). A subscription link opens "Add subscription".
+ */
+function askShared(text) {
+  const raw = String(text || '').trim().slice(0, 200000);
+  if (!raw) return;
+  S.page = 'configs';
+  if (/^https?:\/\/\S+$/i.test(raw)) return openSheet({ type: 'addSub', url: raw, name: '' });
+  const parsed = Core.subscription.parseContent(raw);
+  const { servers } = Core.subscription.splitInfoNodes(parsed.servers || []);
+  if (servers.length) openSheet({ type: 'linkImport', text: raw, names: servers.slice(0, 8).map(nameOf), n: servers.length });
+  else showToast(t('nothingFound'), true);
 }
 
 async function fromClipboard() {
@@ -1535,7 +1551,7 @@ on('link', () => takeLink());
 
 on('shared', async () => {
   const text = await call('intent.take').catch(() => null);
-  if (text) importText(text);
+  if (text) askShared(text);
 });
 
 // The connected-time clock.
@@ -1555,7 +1571,7 @@ async function start() {
     S.ready = true;
     setVpn(hello.vpn);
     const shared = await call('intent.take').catch(() => null);
-    if (shared) importText(shared);
+    if (shared) askShared(shared);
     takeLink();
     call('geo.info').then((g) => { if (g && g.ext) S.geoExt = { ir: Number(g.ext.ir) || 0, ru: Number(g.ext.ru) || 0 }; }).catch(() => {});
     autoUpdateSubs();
