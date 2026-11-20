@@ -80,6 +80,7 @@ class NativeBridge(private val activity: MainActivity) : WebViewCompat.WebMessag
         "app.exit" to { _, r -> activity.moveTaskToBack(true); r.send(true, null) },
         "app.bars" to { a, r -> activity.setBars(a.optBoolean("light", false)); r.send(true, null) },
         "app.open" to ::openUrl,
+        "app.openPanel" to ::openPanelUrl,
         "app.share" to ::share,
         "store.read" to { a, r -> background(r) { store.read(a.getString("name")) } },
         "store.write" to { a, r -> background(r) { store.write(a.getString("name"), a.getString("text")); true } },
@@ -302,6 +303,9 @@ class NativeBridge(private val activity: MainActivity) : WebViewCompat.WebMessag
                 .put("userInfo", res.userInfo ?: JSONObject.NULL)
                 .put("title", res.title ?: JSONObject.NULL)
                 .put("updateHours", res.updateHours ?: JSONObject.NULL)
+                .put("supportUrl", res.supportUrl?.take(600) ?: JSONObject.NULL)
+                .put("webPageUrl", res.webPageUrl?.take(600) ?: JSONObject.NULL)
+                .put("announce", res.announce?.take(2000) ?: JSONObject.NULL)
         }
     }
 
@@ -532,6 +536,19 @@ class NativeBridge(private val activity: MainActivity) : WebViewCompat.WebMessag
     private fun openUrl(a: JSONObject, r: Reply) {
         val uri = Uri.parse(a.getString("url"))
         require(uri.scheme == "https" && uri.host in OPEN_HOSTS) { "BAD_URL" }
+        activity.startActivity(Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE))
+        r.send(true, null)
+    }
+
+    /**
+     * A subscription panel's support or web page link: opened in the browser only when the user taps
+     * it; plain http(s) without a user name or password in it.
+     */
+    private fun openPanelUrl(a: JSONObject, r: Reply) {
+        val url = a.getString("url")
+        require(url.length <= 600) { "BAD_URL" }
+        val uri = Uri.parse(url)
+        require((uri.scheme == "https" || uri.scheme == "http") && !uri.host.isNullOrBlank() && uri.userInfo == null) { "BAD_URL" }
         activity.startActivity(Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE))
         r.send(true, null)
     }

@@ -172,6 +172,20 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .chip { padding: 4px 10px; border-radius: 12px; background: var(--chip); color: var(--text2); font-size: 12px; }
 .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .sub-actions { display: flex; gap: 4px; margin-inline-start: auto; }
+/* One subscription's tab: its traffic and time left under the tabs (tap: details). */
+.sub-strip { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 10px; padding: 8px 14px; border-radius: 16px; background: var(--chip); color: var(--text2); font-size: 12.5px; text-align: start; }
+.sub-strip-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sub-strip-more { display: flex; color: var(--accent); }
+.usage-bar { position: relative; flex: none; width: 56px; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
+.usage-bar > span { position: absolute; inset-block: 0; inset-inline-start: 0; border-radius: 3px; background: var(--accent); }
+.usage-bar.warn > span { background: var(--fair); }
+.usage-bar.unlimited > span { background: repeating-linear-gradient(-45deg, var(--accent) 0 6px, transparent 6px 10px); opacity: .55; }
+.usage-bar.big { width: 100%; height: 10px; border-radius: 5px; }
+.sub-usage { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.sub-usage-text { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; color: var(--text2); }
+.sub-usage-text b { font-size: 17px; color: var(--text); font-weight: 500; }
+.two-btn { display: flex; gap: 10px; margin: 12px 0; }
+.two-btn .btn { flex: 1; }
 .icon-btn.sm { width: 34px; height: 34px; border-radius: 17px; background: var(--chip); color: var(--text2); }
 .pick { display: flex; gap: 8px; flex-wrap: wrap; }
 .pick button { height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid var(--line); color: var(--text2); font-size: 13px; font-weight: 500; }

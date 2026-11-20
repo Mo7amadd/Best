@@ -105,6 +105,10 @@ function cleanSubs(list) {
     autoUpdateHours: Number.isInteger(x.autoUpdateHours) && x.autoUpdateHours >= 0 && x.autoUpdateHours <= 720 ? x.autoUpdateHours : 0,
     updatedAt: Number(x.updatedAt) || Number(x.lastUpdate) || 0,
     notice: Core.util.cleanText(x.notice || '', 300),
+    supportUrl: httpUrl(x.supportUrl).slice(0, 500),
+    webPageUrl: httpUrl(x.webPageUrl).slice(0, 500),
+    announce: Core.util.cleanText(x.announce || '', 500),
+    infoNodes: (Array.isArray(x.infoNodes) ? x.infoNodes : []).map((n) => Core.util.cleanText(String(n || ''), 120)).filter(Boolean).slice(0, 5),
     info: x.info && typeof x.info === 'object' ? Core.subscription.parseUserInfo(Object.entries(x.info).map(([k, v]) => `${k}=${v}`).join(';')) : {},
   }));
 }
@@ -489,6 +493,11 @@ async function downloadSub(sub) {
     });
     if ((split.servers || []).length && !servers.length && (keep || drop)) throw Object.assign(new Error('FILTER_EMPTY'), { code: 'FILTER_EMPTY' });
     sub.info = Core.subscription.parseUserInfo(res.userInfo || '');
+    // What the panel says about itself: support / web page links, announcement, info entries.
+    sub.supportUrl = httpUrl(res.supportUrl).slice(0, 500);
+    sub.webPageUrl = httpUrl(res.webPageUrl).slice(0, 500);
+    sub.announce = Core.util.cleanText(res.announce ? decodeTitle(res.announce) : '', 500);
+    sub.infoNodes = (split.info || []).map((n) => Core.util.cleanText(String(n || ''), 120)).filter(Boolean).slice(0, 5);
     // Expired / out of data: panels then send only info entries. The old configs stay, the
     // panel's message is shown.
     const info = split.info || [];
@@ -834,7 +843,31 @@ function viewConfigs() {
         S.testing
           ? glass('button', 'round-btn sm stop', { 'aria-label': t('stopTests'), onClick: stopTests },
             h('span', { class: 'ring-spin' }), icon('close', 16, 2.4))
-          : glass('button', 'round-btn sm', { 'aria-label': t('testTitle'), onClick: () => openSheet({ type: 'test' }) }, icon('bolt', 19, 1.8)))));
+          : glass('button', 'round-btn sm', { 'aria-label': t('testTitle'), onClick: () => openSheet({ type: 'test' }) }, icon('bolt', 19, 1.8))),
+      S.searching ? null : subStrip()));
+}
+
+/** Traffic and time of a subscription, as the strip and the details sheet show them. */
+function subUsage(sub) {
+  const info = sub.info || {};
+  const used = (info.upload || 0) + (info.download || 0);
+  const pct = info.total ? Math.min(1, used / info.total) : 0;
+  const days = info.expire ? Math.ceil((info.expire * 1000 - Date.now()) / 86400000) : null;
+  const warn = pct > 0.85 || (days !== null && days < 7);
+  const amount = t('usedOf', { used: bytes(used), total: info.total ? bytes(info.total) : '∞' });
+  const time = days === null ? t('noExpiry') : days > 0 ? t('daysLeft', { n: num(days) }) : t('expired');
+  return { info, used, pct, days, warn, amount, time };
+}
+
+/** One line under the tabs of a subscription's own tab: traffic, time left; tap for the details. */
+function subStrip() {
+  const sub = S.subs.find((x) => x.id === S.ui.tab);
+  if (!sub) return null;
+  const u = subUsage(sub);
+  return h('button', { class: 'sub-strip', 'data-key': 'sub-strip', 'aria-label': t('subDetails'), onClick: () => openSheet({ type: 'subInfo', id: sub.id }) },
+    h('span', { class: `usage-bar ${u.info.total ? '' : 'unlimited'} ${u.warn ? 'warn' : ''}` }, h('span', { style: { width: `${u.info.total ? Math.max(2, u.pct * 100) : 100}%` } })),
+    h('span', { class: 'sub-strip-text ltr-num' }, `${u.amount} · `, h('span', { style: u.warn ? { color: 'var(--fair)' } : null }, u.time)),
+    sub.announce || sub.supportUrl || sub.webPageUrl || (sub.infoNodes || []).length ? h('span', { class: 'sub-strip-more' }, icon('info', 16, 1.9)) : icon('chevron', 16, 1.9));
 }
 
 function openSearch() {
@@ -859,13 +892,13 @@ function viewSubs() {
     const warn = pct > 0.85 || (days !== null && days < 7);
     const count = S.servers.filter((s) => s.subId === sub.id).length;
     const C = 2 * Math.PI * 23;
-    return glass('article', 'card', { 'data-key': sub.id },
+    return glass('article', 'card', { 'data-key': sub.id, onClick: (e) => { if (!e.target.closest('button')) openSheet({ type: 'subInfo', id: sub.id }); } },
       h('div', { class: 'conn-row' },
         info.total ? h('div', { class: 'ring' }, ringSvg(pct, warn, C), h('span', { class: 'mono' }, `${num(Math.round(pct * 100))}%`)) : null,
         h('div', { class: 'conn-text' },
           h('span', { class: 'conn-name' }, sub.name || t('subLink')),
-          info.total ? h('span', { class: 'conn-detail' }, t('usedOf', { used: bytes(used), total: bytes(info.total) })) : null,
-          days !== null ? h('span', { class: 'conn-detail', style: warn ? { color: 'var(--fair)' } : null }, days > 0 ? t('daysLeft', { n: num(days) }) : t('expired')) : null),
+          h('span', { class: 'conn-detail' }, t('usedOf', { used: bytes(used), total: info.total ? bytes(info.total) : '∞' })),
+          h('span', { class: 'conn-detail', style: warn ? { color: 'var(--fair)' } : null }, days === null ? t('noExpiry') : days > 0 ? t('daysLeft', { n: num(days) }) : t('expired'))),
         h('span', { class: 'sub-actions' },
           h('button', { class: 'icon-btn sm', 'aria-label': t('update'), onClick: () => updateSub(sub), disabled: S.busy[sub.id] },
             S.busy[sub.id] ? h('span', { class: 'mini-spin' }) : icon('refresh', 17, 1.9)),
@@ -1152,6 +1185,31 @@ function viewSheet() {
         h('button', { class: 'item', onClick: () => { closeSheet(); deleteFailed(); } }, icon('close', 19, 1.8), h('div', { class: 'item-main' }, t('delFailed'))),
         h('button', { class: 'item', onClick: () => { closeSheet(); deleteDuplicates(); } }, icon('copy', 19, 1.8), h('div', { class: 'item-main' }, t('delDup'))),
         h('button', { class: 'item', onClick: () => { closeSheet(); copyAllLinks(); } }, icon('link', 19, 1.8), h('div', { class: 'item-main' }, t('copyAll')))),
+    ];
+  } else if (sh.type === 'subInfo') {
+    const sub = S.subs.find((x) => x.id === sh.id);
+    if (!sub) return null;
+    const u = subUsage(sub);
+    title = sub.name || t('subLink');
+    const row = (label, value, style) => h('div', { class: 'item' }, h('div', { class: 'item-main' }, label), h('span', { class: 'value', style }, value));
+    const open = (url) => call('app.openPanel', { url }).catch(() => showToast(errText('BAD_URL'), true));
+    body = [
+      h('div', { class: 'sub-usage' },
+        h('span', { class: `usage-bar big ${u.info.total ? '' : 'unlimited'} ${u.warn ? 'warn' : ''}` }, h('span', { style: { width: `${u.info.total ? Math.max(2, u.pct * 100) : 100}%` } })),
+        h('div', { class: 'sub-usage-text' }, h('b', null, u.amount), u.info.total ? h('span', null, `${num(Math.round(u.pct * 100))}%`) : h('span', null, t('unlimited')))),
+      glass('div', 'group', null,
+        row(t('download'), bytes(u.info.download || 0)),
+        row(t('upload'), bytes(u.info.upload || 0)),
+        row(t('expires'), u.info.expire ? `${new Date(u.info.expire * 1000).toLocaleDateString(S.settings.language === 'fa' ? 'fa-IR' : S.settings.language)} · ${u.time}` : t('noExpiry'), u.warn ? { color: 'var(--fair)' } : null),
+        row(t('subUpdatedLabel'), sub.updatedAt ? ago(sub.updatedAt) : '—'),
+        row(t('configsLabel'), num(S.servers.filter((s) => s.subId === sub.id).length))),
+      sub.announce ? h('div', { class: 'note' }, icon('info', 18, 1.9), h('span', null, sub.announce)) : null,
+      sub.notice ? h('div', { class: 'note warn' }, icon('alert', 18, 1.9), h('span', null, sub.notice)) : null,
+      (sub.infoNodes || []).length ? glass('div', 'group', null, sub.infoNodes.map((n, i) => h('div', { class: 'item', 'data-key': `in${i}` }, h('div', { class: 'item-main' }, h('small', null, n))))) : null,
+      sub.supportUrl || sub.webPageUrl ? h('div', { class: 'two-btn' },
+        sub.supportUrl ? h('button', { class: 'btn', onClick: () => open(sub.supportUrl) }, icon('info', 18, 1.9), t('subSupport')) : null,
+        sub.webPageUrl ? h('button', { class: 'btn', onClick: () => open(sub.webPageUrl) }, icon('link', 18, 1.9), t('subWebPage')) : null) : null,
+      h('button', { class: 'btn primary', disabled: S.busy[sub.id], onClick: () => { closeSheet(); updateSub(sub); } }, icon('refresh', 18, 1.9), t('update')),
     ];
   } else if (sh.type === 'licenses') {
     title = t('licenses');

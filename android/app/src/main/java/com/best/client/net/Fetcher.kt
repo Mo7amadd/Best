@@ -13,7 +13,11 @@ import java.net.URL
 object Fetcher {
 
     /** `device`: what a panel that limits devices said ("limit", "required" or ""), see DeviceId. */
-    data class Result(val status: Int, val body: String, val userInfo: String?, val title: String?, val updateHours: String?, val device: String = "")
+    data class Result(
+        val status: Int, val body: String, val userInfo: String?, val title: String?, val updateHours: String?, val device: String = "",
+        // The panel's support and web page links and its announcement (headers of Remnawave, Marzban, 3x-ui…).
+        val supportUrl: String? = null, val webPageUrl: String? = null, val announce: String? = null,
+    )
 
     private const val MAX_BYTES = 8 * 1024 * 1024
     private const val TIMEOUT_MS = 25_000
@@ -50,6 +54,9 @@ object Fetcher {
                     title = it.header("profile-title"),
                     updateHours = it.header("profile-update-interval"),
                     device = device,
+                    supportUrl = it.header("support-url"),
+                    webPageUrl = it.header("profile-web-page-url"),
+                    announce = it.header("announce"),
                 )
             }
         }
