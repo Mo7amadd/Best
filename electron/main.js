@@ -31,6 +31,7 @@ const trayI18n = require('./tray-i18n');
 const { normalizeServer, toLink, serverKey, sameConnection, transportLabel, customInboundPorts, parseLink } = require('../src/core/links');
 const { parseContent, parseUserInfo, splitInfoNodes } = require('../src/core/subscription');
 const hwid = require('../src/core/hwid');
+const { serverHasIpv6 } = require('./ipv6probe');
 const { sanitizeSettings, sanitizeRouting, DEFAULT_ROUTING } = require('../src/core/settings');
 const { effectiveRouting, importRules, exportRules, profileFromPanelRouting } = require('../src/core/routing');
 const { needsSingBox, isUnencrypted, hysteriaNeedsXray } = require('../src/core/xray-config');
@@ -306,6 +307,34 @@ async function connect(id) {
   await applyProxyMode();
   broadcast();
   if (settings.showExitIp) checkExitIp().catch(() => {});
+  guardTunIpv6(effective.socksPort).catch(() => {});
+}
+
+// ------------------------------------------------------------------ TUN and IPv6
+// With "IPv6 through the tunnel" on and a server that has no IPv6 exit, IPv6-first programs hang:
+// TUN accepts their connection and the server cannot carry it, so they never fall back to IPv4.
+// After connecting, the server is asked once (through Best's own port, with an IPv4 check); without
+// IPv6, TUN refuses IPv6 for this connection, the way it does with the option off. The setting itself
+// is not changed: the next connection (another server) is asked again.
+let ipv6Seq = 0;
+async function guardTunIpv6(socksPort) {
+  const seq = ++ipv6Seq;
+  if (!settings.tun || !settings.tunIpv6 || !cores.state.tun || !cores.state.running) return;
+  const serverId = cores.state.serverId;
+  const has = await serverHasIpv6(socksPort || settings.socksPort);
+  // Changed meanwhile (another server, TUN or the option switched): that change decides.
+  if (seq !== ipv6Seq || cores.state.serverId !== serverId || !cores.state.tun || !settings.tun || !settings.tunIpv6) return;
+  if (has !== false) {
+    if (has === null) cores.log('app', 'IPv6 check through the server gave no answer (IPv4 failed too); TUN left as it is');
+    return;
+  }
+  const server = servers.find((s) => s.id === serverId);
+  cores.log('app', 'this server has no IPv6: TUN refuses IPv6 for this connection, so programs use IPv4 at once');
+  try {
+    await cores.startTun({ ...tunSettings(), tunIpv6: false });
+    toast('info', 'tunIpv6Off', server ? (server.remark || server.address) : '');
+  } catch (e) { reportConnectError(e); }
+  broadcast();
 }
 
 // ------------------------------------------------------------------ exit IP
@@ -1354,6 +1383,7 @@ const ipcActions = {
         if (settings.tun) await cores.startTun(tunSettings()); else await cores.stopTun();
       } catch (e) { settings = { ...settings, tun: false }; saveSettings(); reportConnectError(e); }
       broadcast();
+      if (settings.tun) guardTunIpv6().catch(() => {});
     } else if (coreKeys.some((k) => JSON.stringify(before[k]) !== JSON.stringify(settings[k]))) {
       await restartIfRunning();
     }

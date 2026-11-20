@@ -27,7 +27,8 @@ function connectionCard() {
   else if (st.proxyMode === 'on') { statusText = t('st_proxyOn'); statusCls = 'on'; }
   else if (st.proxyMode === 'pac') { statusText = t('st_pac'); statusCls = 'on'; }
   else statusText = t('st_ready', { socks: st.socksPort, http: st.httpPort });
-  const help = t(`proxyHelp_${st.proxyMode}`, { socks: `127.0.0.1:${st.socksPort}`, http: `127.0.0.1:${st.httpPort}` });
+  // With TUN on every program goes through the tunnel: the proxy mode note would mislead then.
+  const help = st.tun ? t('proxyHelp_tun') : t(`proxyHelp_${st.proxyMode}`, { socks: `127.0.0.1:${st.socksPort}`, http: `127.0.0.1:${st.httpPort}` });
   // Start when the core is off; Disconnect stops it completely (proxy port, TUN, system proxy set by Best).
   const startBtn = active && !running && !ui.busy
     ? button(t('st_start'), { size: 'sm', icon: 'play', onClick: () => useServer(active.id) })

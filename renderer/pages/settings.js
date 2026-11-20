@@ -353,7 +353,7 @@ export function renderSettings() {
       field(t('tunMtu'), commitInput('tunMtu', { type: 'number', min: 1280, max: 65535 }))),
     h('div', null,
       switchRow('tunStrictRoute', t('tunStrictRoute')),
-      switchRow('tunIpv6', t('tunIpv6'))),
+      switchRow('tunIpv6', t('tunIpv6'), t('tunIpv6_d'))),
     field(t('tunExclude'), (() => {
       const ta = h('textarea', { class: 'input mono', rows: 3, dir: 'ltr', spellcheck: 'false', placeholder: '192.168.0.0/16\n203.0.113.10', 'data-keep': 'set-tunExclude' });
       ta.value = st.tunExclude || '';

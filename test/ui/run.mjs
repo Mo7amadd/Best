@@ -253,13 +253,19 @@ try {
     try {
       // record what the window buttons are given, then let "Windows" switch (Electron's nativeTheme)
       await inMain(`(() => { const w = ${win}; const set = w.setTitleBarOverlay.bind(w); globalThis.__overlay = []; w.setTitleBarOverlay = (o) => { globalThis.__overlay.push(o.color + '/' + o.symbolColor); return set(o); }; })()`);
-      await inMain(`require('electron').nativeTheme.themeSource = 'light'`); await wait(500);
-      await inMain(`require('electron').nativeTheme.themeSource = 'dark'`); await wait(500);
+      // switch to the opposite of what Windows uses now, then back (a switch to the same mode is no change)
+      const darkNow = await inMain(`require('electron').nativeTheme.shouldUseDarkColors`);
+      const [first, second] = darkNow ? ['light', 'dark'] : ['dark', 'light'];
+      await inMain(`require('electron').nativeTheme.themeSource = '${first}'`); await wait(500);
+      await inMain(`require('electron').nativeTheme.themeSource = '${second}'`); await wait(500);
       const seen = await inMain('globalThis.__overlay');
       assert(Array.isArray(seen) && seen.length >= 2, `window buttons not updated: ${JSON.stringify(seen)}`);
-      assert(/^#F5F6F8\//i.test(seen[0]) && !/^#F5F6F8\//i.test(seen[seen.length - 1]), `wrong colours: ${JSON.stringify(seen)}`);
-      // the page itself follows too
-      assert(await ev(`document.documentElement.dataset.theme === 'dark' || getComputedStyle(document.body).backgroundColor !== 'rgb(245, 246, 248)'`), 'page did not turn dark');
+      const light = (c) => /^#F5F6F8\//i.test(c);
+      assert(light(seen[0]) === (first === 'light') && light(seen[seen.length - 1]) === (second === 'light'), `wrong colours: ${JSON.stringify(seen)}`);
+      // the page itself follows too (to the mode applied last)
+      await wait(300);
+      const pageLight = await ev(`getComputedStyle(document.body).backgroundColor === 'rgb(245, 246, 248)'`);
+      assert(pageLight === (second === 'light'), `page did not follow Windows to ${second}`);
     } finally {
       await inMain(`require('electron').nativeTheme.themeSource = 'system'`).catch(() => {});
       mws.close();
