@@ -450,12 +450,15 @@ async function downloadSub(sub) {
   try {
     const ua = sub.userAgent || S.settings.subUserAgent || '';
     const direct = !S.settings.subViaProxy;
-    const res = await call('net.fetch', { url: sub.url, userAgent: ua, direct });
+    // Panels that limit devices (Remnawave …) get a device id; the native side makes it per panel.
+    const hwid = S.settings.subHwid !== false;
+    const deviceName = String(S.settings.subHwidName || '');
+    const res = await call('net.fetch', { url: sub.url, userAgent: ua, direct, hwid, deviceName });
     let all = Core.subscription.parseContent(res.body, { subId: sub.id }).servers || [];
     // Extra links of the same subscription: their configs join this list.
     for (const extra of sub.moreUrls || []) {
       try {
-        const more = await call('net.fetch', { url: extra, userAgent: ua, direct });
+        const more = await call('net.fetch', { url: extra, userAgent: ua, direct, hwid, deviceName });
         all = all.concat(Core.subscription.parseContent(more.body, { subId: sub.id }).servers || []);
       } catch { /* one link failing doesn't stop the others */ }
     }
@@ -483,7 +486,11 @@ async function downloadSub(sub) {
       save('subs');
       return S.servers.filter((s) => s.subId === sub.id).length;
     }
-    if (!servers.length) throw Object.assign(new Error('EMPTY'), { code: 'EMPTY' });
+    if (!servers.length) {
+      // An empty answer with the panel's device-limit flag: say that, not "empty".
+      const code = res.device === 'limit' ? 'HWID_LIMIT' : res.device === 'required' ? 'HWID_REQUIRED' : 'EMPTY';
+      throw Object.assign(new Error(code), { code });
+    }
     sub.notice = '';
     // Keep the selection on the same config after an update (same connection details).
     const old = S.servers.find((s) => s.id === S.ui.selected && s.subId === sub.id);
