@@ -597,13 +597,14 @@ async function autoUpdateSubs() {
   }
 }
 
-// Pull the list down (when it is at the top) to update subscriptions. Only where the list comes
-// from a subscription (not "Manual", not an empty list), and only after a long, deliberate pull:
+// Pull the list down (when it is at the top) to update that subscription. Only in one
+// subscription's own tab (not "All", not "Manual"), and only after a long, deliberate pull:
 // the finger has to travel about 230 px, and nothing happens when it goes back up before letting go.
 const PULL_GO = 96;
 let pullFrom = null;
 function pullStart(e) {
-  pullFrom = e.currentTarget.scrollTop <= 0 && !S.refreshing && !S.sheet && subsOfTab().length ? e.touches[0].clientY : null;
+  const ownTab = S.ui.tab !== 'all' && S.ui.tab !== 'manual' && subsOfTab().length > 0;
+  pullFrom = e.currentTarget.scrollTop <= 0 && !S.refreshing && !S.sheet && ownTab ? e.touches[0].clientY : null;
 }
 function pullMove(e) {
   if (pullFrom === null) return;
@@ -791,13 +792,15 @@ function viewConfigs() {
     delayCell(s)]));
   const showPull = S.pull > 0 || S.refreshing;
   return h('div', { class: 'configs', 'data-key': 'configs' },
+    // One pill in the gap above the list (the list moves down with the finger): icon, and what
+    // letting go would do, so the text never lies over the configs.
     showPull ? h('div', { class: 'pull', 'data-key': 'pull' },
-      glass('span', `pull-ball sm ${S.refreshing ? 'spin' : ''}`, {
-        role: 'status', 'aria-label': S.refreshing ? t('updating') : S.pull >= PULL_GO ? t('pullUpdate') : t('pulling'),
-        style: { transform: `translateY(${S.refreshing ? 12 : S.pull - 30}px) rotate(${S.refreshing ? 0 : S.pull * 4}deg)`, opacity: String(S.refreshing ? 1 : Math.min(1, S.pull / PULL_GO)) },
-      }, icon('refresh', 19, 2)),
-      S.refreshing || S.pull < 24 ? null : h('span', { class: `pull-text ${S.pull >= PULL_GO ? 'go' : ''}`, style: { transform: `translateY(${S.pull + 18}px)` } },
-        S.pull >= PULL_GO ? t('pullUpdate') : t('pulling'))) : null,
+      glass('span', `pull-pill ${S.refreshing ? 'spin' : ''} ${!S.refreshing && S.pull >= PULL_GO ? 'go' : ''}`, {
+        role: 'status',
+        style: { transform: `translateY(${S.refreshing ? 6 : Math.max(0, S.pull - 46)}px)`, opacity: String(S.refreshing ? 1 : Math.max(0, Math.min(1, (S.pull - 30) / 16))) }, // shown once the gap fits it
+      },
+      h('span', { class: 'pull-icon', style: { transform: `rotate(${S.refreshing ? 0 : S.pull * 4}deg)` } }, icon('refresh', 17, 2)),
+      h('span', null, S.refreshing ? t('updating') : S.pull >= PULL_GO ? t('pullUpdate') : t('pulling')))) : null,
     h('div', { class: 'list-scroll', onTouchstart: pullStart, onTouchmove: pullMove, onTouchend: pullEnd, onTouchcancel: pullEnd },
       list.length
         ? h('div', { class: `list ${grid ? 'grid' : ''}`, style: { transform: `translateY(${S.refreshing ? 52 : S.pull}px)`, transition: S.pull ? 'none' : 'transform .3s' } },
