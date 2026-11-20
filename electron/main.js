@@ -32,7 +32,7 @@ const { normalizeServer, toLink, serverKey, sameConnection, transportLabel, cust
 const { parseContent, parseUserInfo, splitInfoNodes } = require('../src/core/subscription');
 const hwid = require('../src/core/hwid');
 const { serverHasIpv6 } = require('./ipv6probe');
-const { sanitizeSettings, sanitizeRouting, DEFAULT_ROUTING } = require('../src/core/settings');
+const { sanitizeSettings, sanitizeRouting, DEFAULT_ROUTING, DEFAULT_SETTINGS } = require('../src/core/settings');
 const { effectiveRouting, importRules, exportRules, profileFromPanelRouting } = require('../src/core/routing');
 const { needsSingBox, isUnencrypted, hysteriaNeedsXray } = require('../src/core/xray-config');
 const { singBoxOutbound } = require('../src/core/singbox-config');
@@ -264,6 +264,7 @@ function snapshot() {
     secureCores: !app.isPackaged || protectedInstall(),
     mihomo: mihomoInstalled(),
     version: app.getVersion(),
+    defaults: DEFAULT_SETTINGS, // Settings marks what differs from these
   };
 }
 
@@ -1197,7 +1198,8 @@ async function cleanupBeforeExit() {
 
 // ------------------------------------------------------------------ windows
 
-const THEME_BG = { dark: '#0E1116', midnight: '#0B1020', graphite: '#151515', light: '#F5F6F8' };
+const THEME_BG = { dark: '#0E1116', midnight: '#0B1020', graphite: '#151515', light: '#F5F6F8', paper: '#F6F3EE', sky: '#EEF3F9' };
+const LIGHT_THEMES = new Set(['light', 'paper', 'sky']);
 
 function themeBg() {
   const t = settings.theme === 'system' ? (nativeTheme.shouldUseDarkColors ? 'dark' : 'light') : settings.theme;
@@ -1206,7 +1208,7 @@ function themeBg() {
 
 function overlayColors() {
   const t = settings.theme === 'system' ? (nativeTheme.shouldUseDarkColors ? 'dark' : 'light') : settings.theme;
-  return t === 'light' ? { color: '#F5F6F8', symbolColor: '#1F2430', height: 40 } : { color: themeBg(), symbolColor: '#C9D1DB', height: 40 };
+  return LIGHT_THEMES.has(t) ? { color: themeBg(), symbolColor: '#1F2430', height: 40 } : { color: themeBg(), symbolColor: '#C9D1DB', height: 40 };
 }
 
 function webPrefs() {

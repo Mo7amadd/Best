@@ -6,6 +6,7 @@ import { t } from './i18n.js';
 import { S, ui, api, go, render, run, toggleSidebar } from './app.js';
 import { serverActions } from './pages/servers.js';
 import { openEditor } from './pages/editor.js';
+import { focusSettingsSearch } from './pages/settings.js';
 
 const PAGES = ['servers', 'subs', 'routing', 'connections', 'logs', 'updates', 'settings'];
 
@@ -21,7 +22,7 @@ export const SHORTCUTS = [
   ['Ctrl+Alt+B', 'sc_global', null, null],
   ['Ctrl+B', 'sc_sidebar', (e) => e.ctrlKey && !e.shiftKey && !e.altKey && e.code === 'KeyB', () => toggleSidebar()],
   ['Ctrl+1 … 7', 'sc_pages', (e) => e.ctrlKey && !e.shiftKey && /^Digit[1-7]$/.test(e.code), (e) => go(PAGES[Number(e.code.slice(5)) - 1])],
-  ['Ctrl+F', 'sc_search', (e) => e.ctrlKey && !e.shiftKey && e.code === 'KeyF', onServers(() => serverActions.focusSearch()), true],
+  ['Ctrl+F', 'sc_search', (e) => e.ctrlKey && !e.shiftKey && e.code === 'KeyF', (e) => (ui.page === 'settings' ? focusSettingsSearch() : onServers(() => serverActions.focusSearch())(e)), true],
   ['Ctrl+N', 'sc_new', (e) => e.ctrlKey && !e.shiftKey && e.code === 'KeyN', () => openEditor(null)],
   ['Ctrl+V', 'sc_paste', (e) => e.ctrlKey && !e.shiftKey && !e.altKey && e.code === 'KeyV', onServers(() => serverActions.importClipboard())],
   ['Ctrl+Shift+V', 'sc_paste', (e) => e.ctrlKey && e.shiftKey && e.code === 'KeyV', onServers(() => serverActions.importClipboard()), true],

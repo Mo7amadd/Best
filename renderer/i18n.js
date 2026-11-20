@@ -96,7 +96,7 @@ const fa = {
 
   settings_title: 'تنظیمات',
   sec_appearance: 'ظاهر', language: 'زبان', theme: 'تم', accent: 'رنگ اصلی', density: 'فاصله‌ی ردیف‌ها',
-  theme_dark: 'تیره', theme_midnight: 'نیمه‌شب', theme_graphite: 'گرافیت', theme_light: 'روشن', theme_system: 'مثل ویندوز',
+  theme_dark: 'تیره', theme_midnight: 'نیمه‌شب', theme_graphite: 'گرافیت', theme_light: 'روشن', theme_paper: 'کاغذی', theme_sky: 'آسمانی', theme_system: 'مثل ویندوز',
   density_comfortable: 'راحت', density_compact: 'فشرده',
   sec_startup: 'شروع و اجرا', autoStart: 'اجرا با روشن شدن ویندوز', startMinimized: 'شروع در پس‌زمینه (tray)', autoConnect: 'اتصال خودکار به آخرین سرور', closeToTray: 'بستن پنجره = رفتن به tray',
   sec_local: 'پورت‌های محلی (اتصال برنامه‌ها)', local_help: 'Best روی خود کامپیوترتان دو «در ورودی» باز می‌کند: SOCKS و HTTP. هر برنامه‌ای که ترافیکش را به این دو پورت بفرستد، از تونل رد می‌شود. وقتی «پروکسی سیستم» را روشن می‌کنید، Best ویندوز و مرورگرها را خودکار به پورت HTTP وصل می‌کند؛ پس معمولاً لازم نیست به این‌ها دست بزنید. فقط اگر برنامه‌ی دیگری (مثلاً v2rayN) همین پورت‌ها را گرفته، عددشان را عوض کنید.', local_help_apps: 'برای برنامه‌هایی مثل تلگرام که تنظیم پروکسی جدا دارند: نوع SOCKS5، آدرس 127.0.0.1، پورت {socks}.', socksPort: 'پورت SOCKS', httpPort: 'پورت HTTP', pacPort: 'پورت PAC', allowLan: 'اجازه‌ی اتصال از شبکه‌ی محلی (LAN)',
@@ -161,6 +161,8 @@ const fa = {
   unencrypted: 'بدون رمزنگاری',
   unencrypted_warn: 'این سرور TLS ندارد و ترافیک بین شما و سرور رمزنگاری نمی‌شود (سایت‌های https همچنان رمزنگاری‌شده‌اند). Best آن را اجرا می‌کند، ولی اگر امکانش هست از TLS یا REALITY استفاده کنید.',
   globalHotkey: 'میان‌برهای سراسری (حتی وقتی Best پنهان است)', globalHotkeyFail: 'این میان‌برها را برنامه‌ی دیگری گرفته: {d}',
+  // settings pages (5 pages, each with subsections)
+  setp_general: 'عمومی', setp_general_d: 'زبان، اجرای خودکار، ظاهر و نسخه‌ها.', setp_conn: 'اتصال', setp_conn_d: 'پروکسی ویندوز، TUN، DNS و اشتراک با شبکه‌ی محلی.', setp_subs: 'اشتراک و تست', setp_subs_d: 'به‌روزرسانی اشتراک‌ها، شناسه‌ی دستگاه و تست سرورها.', setp_backup: 'پشتیبان', setp_backup_d: 'پشتیبان رمزدار در فایل یا روی WebDAV خودتان.', setp_adv: 'پیشرفته', setp_adv_d: 'فقط وقتی تغییر دهید که می‌دانید چه می‌کنند.', ss_langStart: 'زبان و اجرا', ss_proxyPorts: 'پروکسی ویندوز و پورت‌ها', ss_lan: 'شبکه‌ی محلی', ss_subs: 'اشتراک‌ها', ss_tests: 'تست‌ها', ss_file: 'فایل', ss_filter: 'دور زدن فیلتر', ss_linkDefaults: 'پیش‌فرض لینک‌ها', ss_cores: 'هسته‌ها', ss_network: 'شبکه', ss_logs: 'لاگ', grp_shortcuts: 'میان‌برها', grp_display: 'نمایش', adv_tun: 'پشته، MTU، مسیریابی سخت‌گیر', adv_dns: 'Hosts، فایل hosts ویندوز، فقط IPv4', adv_tests: 'آدرس‌های تست و سرویس IP', adv_cores: 'هسته‌ی هر پروتکل', adv_sub: 'User-Agent', pg_prev: 'قبلی', pg_next: 'بعدی', set_changed: 'با پیش‌فرض فرق دارد',
 };
 
 const en = {
@@ -252,7 +254,7 @@ const en = {
   rule_new: 'New rule', rule_edit: 'Edit rule', rule_invalid: 'No valid values entered.',
   settings_title: 'Settings',
   sec_appearance: 'Appearance', language: 'Language', theme: 'Theme', accent: 'Accent', density: 'Row density',
-  theme_dark: 'Dark', theme_midnight: 'Midnight', theme_graphite: 'Graphite', theme_light: 'Light', theme_system: 'Follow Windows',
+  theme_dark: 'Dark', theme_midnight: 'Midnight', theme_graphite: 'Graphite', theme_light: 'Light', theme_paper: 'Paper', theme_sky: 'Sky', theme_system: 'Follow Windows',
   density_comfortable: 'Comfortable', density_compact: 'Compact',
   sec_startup: 'Startup', autoStart: 'Start with Windows', startMinimized: 'Start in the tray', autoConnect: 'Reconnect to the last server', closeToTray: 'Closing the window keeps Best in the tray',
   sec_local: 'Local ports (how apps connect)', local_help: 'Best opens two entry points on your own computer: SOCKS and HTTP. Any app that sends its traffic to these ports goes through the tunnel. Turning on “System proxy” points Windows and your browsers at the HTTP port automatically, so you normally never need to touch these. Change the numbers only if another program (for example v2rayN) already uses the same ports.', local_help_apps: 'For apps with their own proxy setting, such as Telegram: type SOCKS5, address 127.0.0.1, port {socks}.', socksPort: 'SOCKS port', httpPort: 'HTTP port', pacPort: 'PAC port', allowLan: 'Allow connections from the LAN',
@@ -315,6 +317,8 @@ const en = {
   unencrypted: 'Unencrypted',
   unencrypted_warn: 'This server has no TLS, so traffic between you and the server is not encrypted (https sites stay encrypted). Best runs it anyway, but prefer TLS or REALITY when you can.',
   globalHotkey: 'Global shortcuts (work even while Best is hidden)', globalHotkeyFail: 'These shortcuts are taken by another program: {d}',
+  // settings pages (5 pages, each with subsections)
+  setp_general: 'General', setp_general_d: 'Language, starting with Windows, appearance and versions.', setp_conn: 'Connection', setp_conn_d: 'The Windows proxy, TUN, DNS and sharing on the local network.', setp_subs: 'Subscriptions and tests', setp_subs_d: 'Updating subscriptions, the device ID and testing servers.', setp_backup: 'Backup', setp_backup_d: 'An encrypted backup to a file or your own WebDAV.', setp_adv: 'Advanced', setp_adv_d: 'Change these only if you know what they do.', ss_langStart: 'Language and startup', ss_proxyPorts: 'Windows proxy and ports', ss_lan: 'Local network', ss_subs: 'Subscriptions', ss_tests: 'Tests', ss_file: 'File', ss_filter: 'Getting past filtering', ss_linkDefaults: 'Link defaults', ss_cores: 'Cores', ss_network: 'Network', ss_logs: 'Logs', grp_shortcuts: 'Shortcuts', grp_display: 'Display', adv_tun: 'Stack, MTU, strict route', adv_dns: 'Custom hosts, Windows hosts file, IPv4 only', adv_tests: 'Test addresses and the IP service', adv_cores: 'Core for each protocol', adv_sub: 'User-Agent', pg_prev: 'Previous', pg_next: 'Next', set_changed: 'Changed from the default',
 };
 
 const ru = {
@@ -406,7 +410,7 @@ const ru = {
   rule_new: 'Новое правило', rule_edit: 'Изменить правило', rule_invalid: 'Не введено ни одного корректного значения.',
   settings_title: 'Настройки',
   sec_appearance: 'Внешний вид', language: 'Язык', theme: 'Тема', accent: 'Акцентный цвет', density: 'Плотность строк',
-  theme_dark: 'Тёмная', theme_midnight: 'Полночь', theme_graphite: 'Графит', theme_light: 'Светлая', theme_system: 'Как в Windows',
+  theme_dark: 'Тёмная', theme_midnight: 'Полночь', theme_graphite: 'Графит', theme_light: 'Светлая', theme_paper: 'Бумага', theme_sky: 'Небо', theme_system: 'Как в Windows',
   density_comfortable: 'Свободная', density_compact: 'Компактная',
   sec_startup: 'Запуск', autoStart: 'Запускать вместе с Windows', startMinimized: 'Запускать в трее', autoConnect: 'Подключаться к последнему серверу', closeToTray: 'При закрытии окна Best остаётся в трее',
   sec_local: 'Локальные порты (как подключаются приложения)', local_help: 'Best открывает на вашем компьютере две точки входа: SOCKS и HTTP. Любое приложение, отправляющее трафик на эти порты, работает через туннель. При включении «Системного прокси» Windows и браузеры автоматически направляются на HTTP-порт, поэтому обычно эти настройки трогать не нужно. Меняйте номера, только если те же порты уже занимает другая программа (например, v2rayN).', local_help_apps: 'Для приложений с собственной настройкой прокси, например Telegram: тип SOCKS5, адрес 127.0.0.1, порт {socks}.', socksPort: 'Порт SOCKS', httpPort: 'Порт HTTP', pacPort: 'Порт PAC', allowLan: 'Разрешить подключения из LAN',
@@ -469,6 +473,8 @@ const ru = {
   unencrypted: 'Без шифрования',
   unencrypted_warn: 'На этом сервере нет TLS, поэтому трафик между вами и сервером не шифруется (сайты https остаются зашифрованными). Best всё равно запускает его, но по возможности выбирайте TLS или REALITY.',
   globalHotkey: 'Глобальные сочетания клавиш (работают, даже когда Best скрыт)', globalHotkeyFail: 'Эти сочетания заняты другой программой: {d}',
+  // settings pages (5 pages, each with subsections)
+  setp_general: 'Общие', setp_general_d: 'Язык, автозапуск, внешний вид и версии.', setp_conn: 'Подключение', setp_conn_d: 'Системный прокси Windows, TUN, DNS и доступ из локальной сети.', setp_subs: 'Подписки и тесты', setp_subs_d: 'Обновление подписок, идентификатор устройства и проверка серверов.', setp_backup: 'Резервная копия', setp_backup_d: 'Зашифрованная копия в файл или на ваш WebDAV.', setp_adv: 'Дополнительно', setp_adv_d: 'Меняйте, только если знаете, что они делают.', ss_langStart: 'Язык и запуск', ss_proxyPorts: 'Прокси Windows и порты', ss_lan: 'Локальная сеть', ss_subs: 'Подписки', ss_tests: 'Тесты', ss_file: 'Файл', ss_filter: 'Обход блокировок', ss_linkDefaults: 'Значения для ссылок', ss_cores: 'Ядра', ss_network: 'Сеть', ss_logs: 'Журнал', grp_shortcuts: 'Сочетания клавиш', grp_display: 'Отображение', adv_tun: 'Стек, MTU, строгая маршрутизация', adv_dns: 'Свои hosts, файл hosts Windows, только IPv4', adv_tests: 'Адреса тестов и сервис IP', adv_cores: 'Ядро для каждого протокола', adv_sub: 'User-Agent', pg_prev: 'Назад', pg_next: 'Далее', set_changed: 'Отличается от значения по умолчанию',
 };
 
 const zh = {
@@ -897,6 +903,8 @@ const zh = {
   theme_midnight: '午夜',
   theme_graphite: '石墨',
   theme_light: '浅色',
+  theme_paper: '纸张',
+  theme_sky: '天空',
   theme_system: '跟随 Windows',
   density_comfortable: '宽松',
   density_compact: '紧凑',
@@ -1131,6 +1139,8 @@ const zh = {
   unencrypted_warn: '此服务器没有 TLS，因此你和服务器之间的流量未加密（https 网站仍然是加密的）。Best 仍会运行它，但请尽可能优先使用 TLS 或 REALITY。',
   globalHotkey: '全局快捷键（即使 Best 隐藏时也有效）',
   globalHotkeyFail: '这些快捷键已被其他程序占用：{d}',
+  // settings pages (5 pages, each with subsections)
+  setp_general: '常规', setp_general_d: '语言、开机启动、外观和版本。', setp_conn: '连接', setp_conn_d: 'Windows 代理、TUN、DNS 和局域网共享。', setp_subs: '订阅与测试', setp_subs_d: '订阅更新、设备标识和服务器测试。', setp_backup: '备份', setp_backup_d: '加密备份到文件或你自己的 WebDAV。', setp_adv: '高级', setp_adv_d: '只有清楚其作用时才修改。', ss_langStart: '语言与启动', ss_proxyPorts: 'Windows 代理与端口', ss_lan: '局域网', ss_subs: '订阅', ss_tests: '测试', ss_file: '文件', ss_filter: '绕过过滤', ss_linkDefaults: '链接默认值', ss_cores: '内核', ss_network: '网络', ss_logs: '日志', grp_shortcuts: '快捷键', grp_display: '显示', adv_tun: '协议栈、MTU、严格路由', adv_dns: '自定义 hosts、Windows hosts 文件、仅 IPv4', adv_tests: '测试地址和 IP 服务', adv_cores: '每个协议的内核', adv_sub: 'User-Agent', pg_prev: '上一页', pg_next: '下一页', set_changed: '与默认值不同',
 };
 
 const DICTS = { fa, en, ru, zh };

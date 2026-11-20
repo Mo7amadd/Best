@@ -101,28 +101,286 @@ try {
     assert(page.errors.length === 0, `errors: ${page.errors.slice(0, 2).join(' | ')}`);
   });
 
-  await check('settings page shows all its sections', async () => {
-    await ev(`[...document.querySelectorAll('aside .nav-btn')][6].click()`); await wait(400);
-    const cards = await ev(`document.querySelectorAll('.settings .card').length`);
-    assert(cards >= 9, `only ${cards} sections`);
-    await ev(`[...document.querySelectorAll('aside .nav-btn')][0].click()`); await wait(300);
+  // ------------------------------------------------------------ settings (pages, menu, search)
+  const SP = '[data-scroll=page-settings]';
+  // An update check started by an earlier check (opening the Updates page) can end at any moment and
+  // add a banner above the page, moving everything down between aiming and clicking: wait for it.
+  const updatesSettled = () => ev(`(async () => { const m = await import(new URL('app.js', document.baseURI).href); for (let i = 0; i < 150 && m.S.updates && m.S.updates.checking; i++) await new Promise((r) => setTimeout(r, 100)); })()`);
+  const openSettings = async () => { await updatesSettled(); await ev(`[...document.querySelectorAll('aside .nav-btn')][6].click()`); await wait(500); };
+  const setView = () => ev(`(() => {
+    const page = document.querySelector('${SP}');
+    const m = document.querySelector('.set-nav .subs.open .sub-marker');
+    const on = document.querySelector('.set-nav .subs.open .sub.on');
+    return {
+      page: [...document.querySelectorAll('.set-nav .pg')].findIndex((b) => b.classList.contains('on')),
+      shown: [...document.querySelectorAll('.set-pages > .pg-body')].findIndex((b) => b.classList.contains('shown')),
+      sub: [...document.querySelectorAll('.set-nav .subs.open .sub')].findIndex((b) => b.classList.contains('on')),
+      subs: document.querySelectorAll('.set-nav .subs.open .sub').length,
+      heads: document.querySelectorAll('.pg-body.shown .sec-head').length,
+      open: document.querySelectorAll('.set-nav .subs.open').length,
+      marker: Boolean(m && on && Math.abs(m.getBoundingClientRect().top - on.getBoundingClientRect().top) < 2 && m.getBoundingClientRect().height > 20),
+      scroll: Math.round(page.scrollTop), max: Math.round(page.scrollHeight - page.clientHeight),
+    };
+  })()`);
+  const wheel = async (dy) => {
+    // the edge of the pages column: on the cards, never over a text box (which would scroll itself)
+    const [x, y] = await ev(`(() => { const r = document.querySelector('.set-pages').getBoundingClientRect(); return [Math.round(r.left + 5), 500]; })()`);
+    await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x, y, deltaX: 0, deltaY: dy });
+  };
+
+  await check('settings: five pages in the side menu; the first is open with its subsections', async () => {
+    await openSettings();
+    await ev(`document.querySelectorAll('.set-nav .pg')[0].click()`); await wait(400);
+    const n = await ev(`document.querySelectorAll('.set-nav .pg').length`);
+    assert(n === 5, `${n} pages`);
+    const v = await setView();
+    assert(v.page === 0 && v.shown === 0, `open page ${v.page}, shown ${v.shown}`);
+    assert(v.open === 1 && v.subs === v.heads && v.subs >= 2, `subsections in the menu ${v.subs}, on the page ${v.heads}, open menus ${v.open}`);
+    assert(v.sub === 0 && v.marker, `subsection ${v.sub}, marker in place ${v.marker}`);
   });
 
-  await check('settings search: finds a setting and jumps to it with a highlight', async () => {
-    await ev(`[...document.querySelectorAll('aside .nav-btn')][6].click()`); await wait(500);
-    await ev(`document.querySelector('[data-scroll=page-settings]').scrollTop = 0`);
+  await check('settings: every page opens from the side menu with the mouse; its subsections unfold, the marker sits on the first', async () => {
+    await openSettings();
+    for (let i = 0; i < 5; i++) {
+      // click only once the menu has stopped moving (the subsections of the last page fold up)
+      let at = await center('.set-nav .pg', i);
+      for (let k = 0; k < 20; k++) { await wait(80); const again = await center('.set-nav .pg', i); if (again[1] === at[1]) break; at = again; }
+      const [x, y] = at;
+      await click(x, y); await wait(450);
+      const v = await setView();
+      assert(v.page === i && v.shown === i, `clicked page ${i + 1} at ${x},${y}: open ${v.page + 1}, shown ${v.shown + 1}`);
+      assert(v.open === 1 && v.subs === v.heads, `page ${i + 1}: ${v.subs} subsections in the menu, ${v.heads} on the page`);
+      assert(v.sub === 0 && v.scroll === 0 && v.marker, `page ${i + 1}: subsection ${v.sub}, scroll ${v.scroll}, marker ${v.marker}`);
+    }
+    assert(page.errors.length === 0, `errors: ${page.errors.slice(0, 2).join(' | ')}`);
+  });
+
+  await check('settings: scrolling with the wheel walks the menu through every subsection in order, on every page, and back up', async () => {
+    await openSettings();
+    for (let p = 0; p < 5; p++) {
+      const [x, y] = await center('.set-nav .pg', p);
+      await click(x, y); await wait(450);
+      for (const dir of [1, -1]) {
+        const seen = [(await setView()).sub];
+        for (let k = 0; k < 60; k++) {
+          await wheel(100 * dir); await wait(60);
+          const v = await setView();
+          seen.push(v.sub);
+          if (dir > 0 ? v.scroll >= v.max : v.scroll <= 0) break;
+        }
+        await wait(250);
+        const order = seen.filter((s, i) => i === 0 || s !== seen[i - 1]);
+        const v = await setView();
+        const want = [...Array(v.heads).keys()];
+        if (v.max < 1) { assert(order.join(',') === '0', `page ${p + 1} (no scrolling): ${order.join(' → ')}`); break; }
+        if (dir < 0) want.reverse();
+        assert(order.join(',') === want.join(','), `page ${p + 1} scrolling ${dir > 0 ? 'down' : 'up'}: ${order.join(' → ')} (scroll ${v.scroll} of ${v.max})`);
+        assert(v.sub === (dir > 0 ? v.heads - 1 : 0) && v.marker, `page ${p + 1} at the ${dir > 0 ? 'bottom' : 'top'}: subsection ${v.sub + 1} of ${v.heads}, marker ${v.marker}`);
+      }
+    }
+  }, 90000);
+
+  await check('settings: clicking a subsection scrolls to its heading; the menu does not flicker on the way', async () => {
+    await openSettings();
+    await ev(`document.querySelectorAll('.set-nav .pg')[1].click()`); await wait(400);
+    await ev(`document.querySelector('${SP}').scrollTop = 1e6`); await wait(300);
+    const [x, y] = await center('.set-nav .subs.open .sub', 1);
+    await click(x, y);
+    const during = [];
+    for (let k = 0; k < 10; k++) { await wait(40); during.push((await setView()).sub); }
+    await wait(400);
+    const v = await setView();
+    const top = await ev(`Math.round(document.querySelectorAll('.pg-body.shown .sec-head')[1].getBoundingClientRect().top - document.querySelector('${SP}').getBoundingClientRect().top)`);
+    assert([...new Set(during)].join(',') === '1', `menu during the scroll: ${[...new Set(during)].join(',')}`);
+    assert(v.sub === 1 && v.marker, `after: subsection ${v.sub}, marker ${v.marker}`);
+    assert(top >= 0 && top < 40, `heading is ${top}px from the top`);
+    // every subsection in turn: after its scroll the menu stays on it, even after another scroll event
+    const n = await ev(`document.querySelectorAll('.set-nav .subs.open .sub').length`);
+    for (let s = n - 1; s >= 0; s--) {
+      const [xs, ys] = await center('.set-nav .subs.open .sub', s);
+      await click(xs, ys); await wait(700);
+      await ev(`document.querySelector('${SP}').dispatchEvent(new Event('scroll'))`); await wait(50);
+      const vs = await setView();
+      assert(vs.sub === s && vs.marker, `clicked subsection ${s + 1}: the menu shows ${vs.sub + 1} (scroll ${vs.scroll} of ${vs.max})`);
+    }
+    // the first subsection goes back to the very top
+    const [x0, y0] = await center('.set-nav .subs.open .sub', 0);
+    await click(x0, y0); await wait(700);
+    const v0 = await setView();
+    assert(v0.sub === 0 && v0.scroll === 0, `first subsection: ${v0.sub}, scroll ${v0.scroll}`);
+  });
+
+  await check('settings: previous / next buttons at the bottom of the pages (none before the first or after the last)', async () => {
+    await openSettings();
+    for (let i = 0; i < 5; i++) {
+      await ev(`document.querySelectorAll('.set-nav .pg')[${i}].click()`); await wait(300);
+      const has = await ev(`({ prev: Boolean(document.querySelector('.pg-body.shown .pg-nav .prev')), next: Boolean(document.querySelector('.pg-body.shown .pg-nav .next')) })`);
+      assert(has.prev === (i > 0) && has.next === (i < 4), `page ${i + 1}: previous ${has.prev}, next ${has.next}`);
+    }
+    await ev(`document.querySelectorAll('.set-nav .pg')[1].click()`); await wait(300);
+    await ev(`document.querySelector('${SP}').scrollTop = 1e6`); await wait(200);
+    let [x, y] = await center('.pg-body.shown .pg-nav .next');
+    await click(x, y); await wait(450);
+    let v = await setView();
+    assert(v.page === 2 && v.scroll === 0 && v.sub === 0, `next: page ${v.page + 1}, scroll ${v.scroll}, subsection ${v.sub}`);
+    await ev(`document.querySelector('${SP}').scrollTop = 1e6`); await wait(200);
+    [x, y] = await center('.pg-body.shown .pg-nav .prev');
+    await click(x, y); await wait(450);
+    v = await setView();
+    assert(v.page === 1 && v.scroll === 0, `previous: page ${v.page + 1}, scroll ${v.scroll}`);
+  });
+
+  await check('settings: the arrows on previous / next point outwards in right-to-left and left-to-right', async () => {
+    await openSettings();
+    await ev(`document.querySelectorAll('.set-nav .pg')[1].click()`); await wait(300);
+    // which way the arrow points on screen: rotated "down" chevron → b of the matrix (1: left, -1: right)
+    const dirs = () => ev(`(() => {
+      const way = (sel) => { const m = new DOMMatrix(getComputedStyle(document.querySelector(sel)).transform); return Math.round(m.b) === 1 ? 'left' : Math.round(m.b) === -1 ? 'right' : 'down'; };
+      const side = (sel) => { const b = document.querySelector(sel).getBoundingClientRect(); return b.left + b.width / 2 < document.querySelector('.pg-body.shown .pg-nav').getBoundingClientRect().left + document.querySelector('.pg-body.shown .pg-nav').getBoundingClientRect().width / 2 ? 'left' : 'right'; };
+      return { next: way('.pg-body.shown .pg-nav .next .icon'), prev: way('.pg-body.shown .pg-nav .prev .icon'), nextSide: side('.pg-body.shown .pg-nav .next'), prevSide: side('.pg-body.shown .pg-nav .prev'), adv: way('.pg-body.shown .adv:not(.open) .adv-head .icon') };
+    })()`);
+    const fa = await dirs();
+    assert(fa.next === 'left' && fa.nextSide === 'left' && fa.prev === 'right' && fa.prevSide === 'right', `Persian: ${JSON.stringify(fa)}`);
+    assert(fa.adv === 'left', `Persian: closed "Advanced" arrow points ${fa.adv}`);
+    await setSettings({ language: 'en' }); await wait(300);
+    const en = await dirs();
+    await setSettings({ language: 'fa' }); await wait(300);
+    assert(en.next === 'right' && en.nextSide === 'right' && en.prev === 'left' && en.prevSide === 'left', `English: ${JSON.stringify(en)}`);
+    assert(en.adv === 'right', `English: closed "Advanced" arrow points ${en.adv}`);
+  });
+
+  await check('settings: an "Advanced" box opens and closes with the mouse, and stays open through a redraw', async () => {
+    await openSettings();
+    await ev(`document.querySelectorAll('.set-nav .pg')[1].click()`); await wait(300);
+    const SEL = '.pg-body.shown .adv[data-adv=tun]';
+    await ev(`document.querySelector('${SEL}').scrollIntoView({ block: 'center' })`); await wait(200);
+    const visible = () => ev(`(() => { const i = document.querySelector('input[data-keep="set-tunMtu"]'); return Boolean(i && i.offsetWidth); })()`);
+    assert(!(await visible()), 'MTU visible before opening');
+    let [x, y] = await center(`${SEL} .adv-head`);
+    await click(x, y); await wait(250);
+    assert(await visible(), 'MTU not visible after opening');
+    await setSettings({ density: 'compact' }); await setSettings({ density: 'comfortable' });
+    assert(await visible(), 'closed again by a redraw');
+    [x, y] = await center(`${SEL} .adv-head`);
+    await click(x, y); await wait(250);
+    assert(!(await visible()), 'did not close');
+  });
+
+  await check('settings: a redraw keeps the open page, the subsection and the scroll', async () => {
+    await openSettings();
+    await ev(`document.querySelectorAll('.set-nav .pg')[1].click()`); await wait(300);
+    await ev(`document.querySelectorAll('.set-nav .subs.open .sub')[2].click()`); await wait(700);
+    const before = await setView();
+    await setSettings({ density: 'compact' });
+    const after = await setView();
+    await setSettings({ density: 'comfortable' });
+    assert(after.page === 1 && after.sub === 2 && Math.abs(after.scroll - before.scroll) <= 1 && after.marker, `before ${JSON.stringify(before)}, after ${JSON.stringify(after)}`);
+  });
+
+  await check('settings: a setting changed from its default gets a dot, and its page in the menu too', async () => {
+    await openSettings();
+    await setSettings({ mux: true });
+    const on = await ev(`({ page: document.querySelectorAll('.set-nav .pg .mod-dot')[4].classList.contains('on'), label: document.querySelector('.switch-row[data-s=mux] .txt span').classList.contains('changed'), others: [...document.querySelectorAll('.set-nav .pg .mod-dot')].slice(0, 4).map((d) => d.classList.contains('on')) })`);
+    await setSettings({ mux: false });
+    const off = await ev(`({ page: document.querySelectorAll('.set-nav .pg .mod-dot')[4].classList.contains('on'), label: document.querySelector('.switch-row[data-s=mux] .txt span').classList.contains('changed') })`);
+    assert(on.page && on.label, `after turning Mux on: page dot ${on.page}, setting dot ${on.label}`);
+    assert(!off.page && !off.label, `after turning it back: page dot ${off.page}, setting dot ${off.label}`);
+  });
+
+  await check('settings search: a setting on another page — clicked in the list, its page opens and it glows on screen', async () => {
+    await openSettings();
+    await ev(`document.querySelectorAll('.set-nav .pg')[0].click()`); await wait(300);
     const box = await center('.set-find input');
     await click(box[0], box[1]);
     await send('Input.insertText', { text: 'webdav' }); await wait(250);
     const n = await ev(`document.querySelectorAll('.set-find-item').length`);
     assert(n > 0, 'no results for "webdav"');
+    const where = await ev(`document.querySelector('.set-find-item .set-find-sec').textContent`);
+    assert(where.includes('›'), `result has no page › section: ${where}`);
     const first = await center('.set-find-item');
-    await click(first[0], first[1]); await wait(600);
+    await click(first[0], first[1]); await wait(700);
     const r = await ev(`(() => { const t = document.querySelector('.set-flash'); if (!t) return null; const b = t.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, h: innerHeight, list: Boolean(document.querySelector('.set-find-list')) }; })()`);
-    assert(r, `nothing highlighted (results: ${n}, list open: ${await ev("Boolean(document.querySelector('.set-find-list'))")}, page scroll: ${await ev("Math.round(document.querySelector('[data-scroll=page-settings]')?.scrollTop ?? -1)")})`);
+    assert(r, `nothing highlighted (results: ${n}, page ${(await setView()).page + 1})`);
+    assert((await setView()).page === 3, `opened page ${(await setView()).page + 1}, not Backup`);
     assert(r.top >= 0 && r.bottom <= r.h, 'highlighted setting is not on screen');
     assert(!r.list, 'result list still open');
     await ev(`(() => { const i = document.querySelector('.set-find input'); i.value = ''; i.blur(); })()`);
+  });
+
+  await check('settings search: a setting inside a closed "Advanced" box — Enter opens its page and the box, and it glows', async () => {
+    await openSettings();
+    await ev(`document.querySelectorAll('.set-nav .pg')[0].click()`); await wait(300);
+    const box = await center('.set-find input');
+    await click(box[0], box[1]);
+    await send('Input.insertText', { text: 'MTU' }); await wait(250);
+    await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+    await wait(700);
+    const v = await setView();
+    const r = await ev(`(() => { const t = document.querySelector('.set-flash'); if (!t) return null; const b = t.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, h: innerHeight, open: Boolean(t.closest('.adv.open')) }; })()`);
+    assert(v.page === 1 && v.sub === 1 && v.marker, `page ${v.page + 1}, subsection ${v.sub}, marker ${v.marker}`);
+    assert(r && r.open && r.top >= 0 && r.bottom <= r.h, `highlight ${JSON.stringify(r)}`);
+    await ev(`(() => { const i = document.querySelector('.set-find input'); i.value = ''; i.blur(); })()`);
+    await ev(`document.querySelector('.adv[data-adv=tun] .adv-head').click()`);
+  });
+
+  await check('settings: Ctrl+F puts the cursor in the settings search without moving the page; Escape leaves it', async () => {
+    await openSettings();
+    await ev(`document.querySelectorAll('.set-nav .pg')[1].click()`); await wait(300);
+    await ev(`document.querySelector('${SP}').scrollTop = 500`); await wait(150);
+    const before = (await setView()).scroll;
+    // the "Ctrl F" label sits at the far end of the box, clear of the magnifier and of the text
+    for (const lang of ['fa', 'en']) {
+      await setSettings({ language: lang }); await wait(250);
+      const k = await ev(`(() => { const r = (sel) => document.querySelector(sel).getBoundingClientRect(); const ic = r('.set-find > .icon'), kb = r('.set-find .find-kbd'), box = r('.set-find .input'); const pad = parseFloat(getComputedStyle(document.querySelector('.set-find .input')).paddingInlineEnd); const rtl = document.documentElement.dir === 'rtl'; return { apart: kb.right < ic.left || kb.left > ic.right, endSide: rtl ? kb.left < ic.left : kb.left > ic.left, room: pad >= kb.width + 8 }; })()`);
+      assert(k.apart && k.endSide && k.room, `${lang}: Ctrl F label ${JSON.stringify(k)}`);
+    }
+    await setSettings({ language: 'fa' }); await wait(250);
+    await ev(`document.querySelector('${SP}').scrollTop = 500`); await wait(150);
+    await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'f', code: 'KeyF', windowsVirtualKeyCode: 70, modifiers: 2 });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'f', code: 'KeyF', windowsVirtualKeyCode: 70, modifiers: 2 });
+    await wait(200);
+    const r = await ev(`({ focused: document.activeElement === document.querySelector('.set-find input'), scroll: Math.round(document.querySelector('${SP}').scrollTop) })`);
+    assert(r.focused, 'search box not focused');
+    assert(Math.abs(r.scroll - before) <= 1, `page moved from ${before} to ${r.scroll}`);
+    await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await wait(150);
+    assert(!(await ev(`document.activeElement === document.querySelector('.set-find input')`)), 'Escape did not leave the box');
+  });
+
+  await check('settings: narrow window — pages and subsections move to two rows on top and follow the scroll', async () => {
+    await openSettings();
+    await send('Emulation.setDeviceMetricsOverride', { width: 860, height: 820, deviceScaleFactor: 1, mobile: false });
+    await wait(600);
+    try {
+      const shape = await ev(`({ top: Boolean(document.querySelector('.set-top')), side: Boolean(document.querySelector('.set-side')), find: Boolean(document.querySelector('.page-head .set-find')) })`);
+      assert(shape.top && !shape.side && shape.find, `narrow layout: ${JSON.stringify(shape)}`);
+      const [x, y] = await center('.set-top .row1 button', 1);
+      await click(x, y); await wait(450);
+      const r1 = await ev(`[...document.querySelectorAll('.set-top .row1 button')].findIndex((b) => b.classList.contains('on'))`);
+      assert(r1 === 1, `pages row: ${r1}`);
+      await ev(`document.querySelector('${SP}').scrollTop = 1e6`); await wait(400);
+      const r = await ev(`(() => { const b = [...document.querySelectorAll('.set-top .row2 button')]; const on = b.findIndex((x) => x.classList.contains('on')); const bar = document.querySelector('.set-top .bar'); const page = document.querySelector('${SP}'); return { on, n: b.length, bar: Math.abs(parseFloat(bar.style.left) - b[on].offsetLeft) < 1 && parseFloat(bar.style.width) > 10, hscroll: page.scrollWidth > page.clientWidth, sticky: Math.round(document.querySelector('.set-top').getBoundingClientRect().top - page.getBoundingClientRect().top) }; })()`);
+      assert(r.on === r.n - 1 && r.bar, `subsections row at the bottom: ${r.on + 1} of ${r.n}, underline under it ${r.bar}`);
+      assert(!r.hscroll, 'the page scrolls sideways');
+      assert(r.sticky <= 0, `rows not stuck to the top (${r.sticky}px)`);
+      const [x2, y2] = await center('.set-top .row2 button', 0);
+      await click(x2, y2); await wait(700);
+      assert((await ev(`Math.round(document.querySelector('${SP}').scrollTop)`)) === 0, 'first subsection did not scroll to the top');
+    } finally {
+      await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 820, deviceScaleFactor: 1, mobile: false });
+      await wait(600);
+    }
+    assert(await ev(`Boolean(document.querySelector('.set-side'))`), 'side menu did not come back when wide again');
+  });
+
+  await check('settings: a one-line note with a button has its text in the middle of the box', async () => {
+    await openSettings();
+    await ev(`document.querySelectorAll('.set-nav .pg')[1].click()`); await wait(300);
+    const r = await ev(`(() => { const n = [...document.querySelectorAll('.pg-body.shown .note')].find((x) => x.querySelector(':scope > .btn')); if (!n) return null; const b = n.getBoundingClientRect(); const s = n.querySelector('.grow').getBoundingClientRect(); return Math.abs((b.top + b.bottom) / 2 - (s.top + s.bottom) / 2); })()`);
+    if (r === null) throw new Skip('running as administrator: no note with a button');
+    assert(r <= 1.5, `text is ${r}px off the middle`);
   });
 
   // ------------------------------------------------------------ menus
@@ -319,6 +577,8 @@ try {
 
   await check('typing in a settings box survives a state update (value and focus kept)', async () => {
     await ev(`[...document.querySelectorAll('aside .nav-btn')][6].click()`); await wait(400);
+    await ev(`document.querySelectorAll('.set-nav .pg')[2].click()`); await wait(300);
+    await ev(`(() => { const a = document.querySelector('.adv[data-adv=tests]'); if (!a.classList.contains('open')) a.querySelector('.adv-head').click(); })()`);
     await ev(`(() => { const i = document.querySelector('input[data-keep="set-testUrl"]'); i.focus(); i.value = 'https://example.org/typing'; })()`);
     await setSettings({ density: 'compact' });
     const r = await ev(`(() => { const i = document.querySelector('input[data-keep="set-testUrl"]'); return { v: i.value, focused: document.activeElement === i }; })()`);
@@ -329,6 +589,7 @@ try {
 
   await check('number box arrows: a click steps once, holding keeps counting, saved once on release', async () => {
     await ev(`[...document.querySelectorAll('aside .nav-btn')][6].click()`); await wait(400);
+    await ev(`document.querySelectorAll('.set-nav .pg')[2].click()`); await wait(300);
     await setSettings({ testConcurrency: 8 });
     const SEL = 'input[data-keep="set-testConcurrency"]';
     await ev(`document.querySelector(${JSON.stringify(SEL)}).scrollIntoView({ block: 'center' })`); await wait(300);
@@ -376,6 +637,9 @@ try {
       const n = await ev(`document.querySelectorAll('aside .nav-btn:not(.nav-help)').length`);
       for (let p = 0; p < n; p++) {
         await ev(`[...document.querySelectorAll('aside .nav-btn:not(.nav-help)')][${p}].click()`); await wait(450);
+        const subPages = Math.max(1, await ev(`document.querySelectorAll('.set-nav .pg').length`));
+        for (let k = 0; k < subPages; k++) {
+        if (subPages > 1) { await ev(`document.querySelectorAll('.set-nav .pg')[${k}].click()`); await wait(300); await ev(`document.querySelectorAll('.pg-body.shown .adv:not(.open) > .adv-head').forEach((b) => b.click())`); await wait(100); }
         const r = await ev(`(() => {
           const text = document.body.innerText;
           // t() shows the key itself when a translation is missing: snake_case words like upd_help
@@ -385,11 +649,12 @@ try {
             .map((b) => b.textContent.trim().slice(0, 30));
           return { keys, clipped, lang: document.documentElement.lang, font: getComputedStyle(document.body).fontFamily, cjk: /[\\u4e00-\\u9fff]/.test(text) };
         })()`);
-        const where = `${lang} page ${p + 1}`;
+        const where = `${lang} page ${p + 1}${subPages > 1 ? `.${k + 1}` : ''}`;
         if (r.lang !== lang) bad.push(`${where}: html lang is ${r.lang}`);
         if (r.keys.length) bad.push(`${where}: untranslated ${r.keys.slice(0, 4).join(', ')}`);
         if (r.clipped.length) bad.push(`${where}: clipped ${r.clipped.slice(0, 3).join(' | ')}`);
         if (lang === 'zh' && (!r.cjk || !/YaHei/.test(r.font))) bad.push(`${where}: Chinese text ${r.cjk} font ${r.font}`);
+        }
       }
     }
     await setSettings({ language: 'fa' });
@@ -494,7 +759,14 @@ try {
       await ev(`[...document.querySelectorAll('aside .nav-btn:not(.nav-help)')][${p}].click()`); await wait(600);
       await move(1300, 300); await wait(200); // mouse off the side menu
       const name = await ev(`[...document.querySelectorAll('aside .nav-btn:not(.nav-help)')][${p}].getAttribute('aria-label')`);
-      bad.push(...(await sweep('main', name)));
+      const subPages = await ev(`document.querySelectorAll('.set-nav .pg').length`);
+      if (!subPages) bad.push(...(await sweep('main', name)));
+      for (let k = 0; k < subPages; k++) { // Settings: one page at a time (the others are hidden)
+        await ev(`document.querySelectorAll('.set-nav .pg')[${k}].click()`); await wait(350);
+        await ev(`document.querySelectorAll('.pg-body.shown .adv:not(.open) > .adv-head').forEach((b) => b.click())`); await wait(150);
+        const sub = await ev(`document.querySelectorAll('.set-nav .pg')[${k}].textContent.trim()`);
+        bad.push(...(await sweep('main .pg-body.shown', `${name} › ${sub}`)));
+      }
       if (await ev(`Boolean(document.querySelector('.overlay, .modal, .drawer'))`)) { await ev(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`); await wait(300); }
     }
     await setSettings({ language: 'fa', theme: 'dark', uiZoom: 1, density: 'comfortable' });

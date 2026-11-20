@@ -92,7 +92,7 @@ const DEFAULT_ROUTING = Object.freeze({
 
 const ENUMS = {
   language: ['fa', 'en', 'ru', 'zh'],
-  theme: ['dark', 'light', 'midnight', 'graphite', 'system'],
+  theme: ['dark', 'light', 'midnight', 'graphite', 'paper', 'sky', 'system'],
   accent: ['green', 'blue', 'purple', 'orange', 'pink'],
   density: ['comfortable', 'compact'],
   logLevel: ['debug', 'info', 'warning', 'error', 'none'],
