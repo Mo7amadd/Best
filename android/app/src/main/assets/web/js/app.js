@@ -215,10 +215,13 @@ function rate(bps) {
   return [num(bps), 'B/s'];
 }
 
+// An amount kept in one piece inside right-to-left text ("۹۹٫۴ GB", never "GB ۹۹٫۴").
+const isolate = (text) => `\u2068${text}\u2069`;
+
 function bytes(n) {
-  if (n >= 1024 ** 3) return `${num(n / 1024 ** 3, 1)} GB`;
-  if (n >= 1024 ** 2) return `${num(n / 1024 ** 2, 1)} MB`;
-  return `${num(Math.round(n / 1024))} KB`;
+  if (n >= 1024 ** 3) return isolate(`${num(n / 1024 ** 3, 1)} GB`);
+  if (n >= 1024 ** 2) return isolate(`${num(n / 1024 ** 2, 1)} MB`);
+  return isolate(`${num(Math.round(n / 1024))} KB`);
 }
 
 function clock(ms) {
@@ -784,7 +787,7 @@ function tabs() {
       items.map(([id, label, count]) => h('button', {
         class: S.ui.tab === id ? 'on' : '', 'data-key': id,
         onClick: () => { S.ui.tab = id; save('ui'); render(); },
-      }, h('b', null, label), h('span', null, num(count))))));
+      }, h('b', { dir: 'auto' }, label), h('span', null, num(count))))));
 }
 
 function delayCell(s) {
