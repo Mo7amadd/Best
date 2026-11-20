@@ -19,6 +19,7 @@
   --shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 18px 40px rgba(0,0,0,.45);
   --shadow-sm: inset 0 1px 0 rgba(255,255,255,.06), 0 8px 20px rgba(0,0,0,.30);
   --track: rgba(255,255,255,.12); --off: rgba(255,255,255,.16);
+  --pick-card: rgba(255,255,255,.17); --pick-ring: rgba(255,255,255,.26);
   --aurora-a: rgba(61,214,140,.30); --aurora-b: rgba(90,169,255,.16); --aurora-idle: rgba(139,149,163,.14);
   color-scheme: dark;
 }
@@ -28,6 +29,7 @@
   --fair: #9A5F00; --fair-soft: rgba(200,130,0,.13); --bad: #C93A2B; --bad-soft: rgba(201,58,43,.12);
   --glass: rgba(255,255,255,.52); --glass-hi: rgba(255,255,255,.90); --solid: #FFFFFF; --chip: rgba(20,30,50,.06); --line: rgba(20,30,50,.07);
   --sheet: rgba(246,248,251,.84); --group: rgba(255,255,255,.80); --scrim: rgba(30,40,60,.20);
+  --pick-card: rgba(255,255,255,.95); --pick-ring: rgba(20,30,50,.06);
   --rimA: rgba(255,255,255,1); --rimB: rgba(255,255,255,.30); --rimC: rgba(255,255,255,.85);
   --shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 18px 40px rgba(30,45,70,.14);
   --shadow-sm: inset 0 1px 0 rgba(255,255,255,.9), 0 6px 16px rgba(30,45,70,.10);
@@ -125,6 +127,14 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .row-name { font-size: 15px; font-weight: 500; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row-sub { font-size: 12px; color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Two columns (Settings › Config list): small cards, the chosen one lit like the puck. */
+.list.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.list.grid .row { height: auto; min-height: 82px; flex-direction: column; align-items: stretch; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 18px; background: var(--chip); transition: background-color .3s, box-shadow .3s; }
+.list.grid .row.on { background: var(--pick-card); box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--pick-ring); }
+.list.grid .row-name { font-size: 14px; line-height: 1.35; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.list.grid .row-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.list.grid .delay { min-width: 0; }
+.row-tag { flex: none; font-size: 10.5px; letter-spacing: .02em; padding: 2px 7px; border-radius: 7px; background: var(--chip); color: var(--text2); }
 .delay { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 64px; font-size: 12px; color: var(--text2); }
 .dot { width: 6px; height: 6px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
 .dot.fair { background: var(--fair); box-shadow: 0 0 8px var(--fair); }

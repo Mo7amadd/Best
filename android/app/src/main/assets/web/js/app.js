@@ -27,7 +27,7 @@ const S = {
   routing: Core.settings.sanitizeRouting({}),
   servers: [],
   subs: [],
-  ui: { selected: '', tab: 'all', glass: true, sortFast: false, appMode: 'all', apps: [], metric: 'delay', updBeta: false, updAuto: true, updWifi: true, updLast: 0, logConnections: false, mode: 'vpn', bootConnect: false, allowTasker: false, vpnMtu: 1500, fakeDns: false, preferIpv6: false, autoTest: false, autoDelete: false },
+  ui: { selected: '', tab: 'all', glass: true, sortFast: false, appMode: 'all', apps: [], metric: 'delay', updBeta: false, updAuto: true, updWifi: true, updLast: 0, logConnections: false, mode: 'vpn', bootConnect: false, allowTasker: false, vpnMtu: 1500, fakeDns: false, preferIpv6: false, autoTest: false, autoDelete: false, listView: 'list' },
   exit: null, // { ip, cc } of the running connection
   lanIp: null,
   geoExt: { ir: 0, ru: 0 },
@@ -131,6 +131,7 @@ async function load() {
     S.ui.mode = ui.mode === 'proxy' ? 'proxy' : 'vpn';
     for (const k of ['bootConnect', 'allowTasker', 'fakeDns', 'preferIpv6', 'autoTest', 'autoDelete']) S.ui[k] = ui[k] === true;
     S.ui.vpnMtu = Number.isInteger(ui.vpnMtu) && ui.vpnMtu >= 1280 && ui.vpnMtu <= 9000 ? ui.vpnMtu : 1500;
+    S.ui.listView = ui.listView === 'grid' ? 'grid' : 'list';
   }
 }
 
@@ -163,6 +164,9 @@ function reconnect() {
 
 const nameOf = (s) => (s && (s.remark || s.address)) || '';
 const protoOf = (s) => PROTO_LABEL[s.protocol] || String(s.protocol || '').toUpperCase();
+// Short protocol tag of the two-column view.
+const SHORT_PROTO = { vless: 'VLESS', vmess: 'VMESS', trojan: 'TROJAN', shadowsocks: 'SS', hysteria2: 'HY2', hysteria: 'HY', tuic: 'TUIC', wireguard: 'WG', anytls: 'ANYTLS', naive: 'NAIVE', socks: 'SOCKS', http: 'HTTP', group: 'GROUP', custom: 'JSON' };
+const shortProto = (s) => SHORT_PROTO[s.protocol] || String(s.protocol || '').toUpperCase().slice(0, 6);
 const subOf = (s) => (s.protocol === 'group'
   ? `${t('ed_group')} · ${t('membersN', { n: num((s.members || []).length) })} · ${t(`strat_${s.strategy || 'leastPing'}`)}`
   : `${protoOf(s)} · ${Core.links.transportLabel(s)}`);
@@ -755,15 +759,19 @@ function delayCell(s) {
 function viewConfigs() {
   const list = visibleServers();
   const idx = list.findIndex((s) => s.id === S.ui.selected);
+  // Two columns (Settings › Config list): small cards, the chosen one lit; the list keeps its sliding puck.
+  const grid = S.ui.listView === 'grid';
   const rows = list.map((s) => h('button', {
-    class: 'row', 'data-key': s.id,
+    class: `row ${grid && s.id === S.ui.selected ? 'on' : ''}`, 'data-key': s.id,
     onClick: () => select(s.id),
     onContextmenu: (e) => { e.preventDefault(); openSheet({ type: 'row', id: s.id }); },
   },
-  h('span', { class: 'row-main' },
-    h('span', { class: 'row-name' }, nameOf(s)),
-    h('span', { class: 'row-sub' }, subOf(s))),
-  delayCell(s)));
+  grid
+    ? [h('span', { class: 'row-name' }, nameOf(s)), h('span', { class: 'row-foot' }, h('span', { class: 'row-tag mono' }, shortProto(s)), delayCell(s))]
+    : [h('span', { class: 'row-main' },
+      h('span', { class: 'row-name' }, nameOf(s)),
+      h('span', { class: 'row-sub' }, subOf(s))),
+    delayCell(s)]));
   const showPull = S.pull > 0 || S.refreshing;
   return h('div', { class: 'configs', 'data-key': 'configs' },
     showPull ? h('div', { class: 'pull', 'data-key': 'pull' },
@@ -773,8 +781,8 @@ function viewConfigs() {
       }, icon('refresh', 19, 2))) : null,
     h('div', { class: 'list-scroll', onTouchstart: pullStart, onTouchmove: pullMove, onTouchend: pullEnd, onTouchcancel: pullEnd },
       list.length
-        ? h('div', { class: 'list', style: { transform: `translateY(${S.refreshing ? 52 : S.pull}px)`, transition: S.pull ? 'none' : 'transform .3s' } },
-          h('span', { class: 'puck', style: { transform: `translateY(${Math.max(idx, 0) * 64}px)`, opacity: idx < 0 ? '0' : '1' } }),
+        ? h('div', { class: `list ${grid ? 'grid' : ''}`, style: { transform: `translateY(${S.refreshing ? 52 : S.pull}px)`, transition: S.pull ? 'none' : 'transform .3s' } },
+          grid ? null : h('span', { class: 'puck', style: { transform: `translateY(${Math.max(idx, 0) * 64}px)`, opacity: idx < 0 ? '0' : '1' } }),
           rows)
         : S.searching && S.query.trim()
           ? h('div', { class: 'empty' }, h('span', { class: 'empty-icon' }, icon('search', 28, 1.7)), h('b', null, t('noResults')))
@@ -1010,7 +1018,11 @@ function viewSettings() {
       h('div', { class: 'item' }, h('div', { class: 'item-main' }, t('theme')),
         h('div', { class: 'pick' }, [['dark', t('dark')], ['light', t('light')]].map(([v, label]) => h('button', { class: S.settings.theme === v ? 'on' : '', 'data-key': v, onClick: () => setS({ theme: v }) }, label)))),
       h('button', { class: 'item', onClick: () => { S.ui.glass = !S.ui.glass; save('ui'); applyLook(); render(); } },
-        h('div', { class: 'item-main' }, t('glass'), h('small', null, t('glassHint'))), sw(S.ui.glass))),
+        h('div', { class: 'item-main' }, t('glass'), h('small', null, t('glassHint'))), sw(S.ui.glass)),
+      h('div', { class: 'item' }, h('div', { class: 'item-main' }, t('listLook'), h('small', null, t('listLookHint'))),
+        h('div', { class: 'pick' }, [['list', t('listRows')], ['grid', t('listGrid')]].map(([v, label]) => h('button', {
+          class: (S.ui.listView === 'grid' ? 'grid' : 'list') === v ? 'on' : '', 'data-key': `list-${v}`, onClick: () => { S.ui.listView = v; save('ui'); render(); },
+        }, label))))),
     h('div', { class: 'section-label' }, t('connection')),
     glass('div', 'group', null,
       h('div', { class: 'item' }, h('div', { class: 'item-main' }, t('modeTitle'),
