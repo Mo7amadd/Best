@@ -27,7 +27,7 @@ const S = {
   routing: Core.settings.sanitizeRouting({}),
   servers: [],
   subs: [],
-  ui: { selected: '', tab: 'all', glass: true, sortFast: false, appMode: 'all', apps: [], metric: 'delay', updBeta: false, updAuto: true, updWifi: true, updLast: 0, logConnections: false, mode: 'vpn', bootConnect: false, allowTasker: false, vpnMtu: 1500, fakeDns: false, preferIpv6: false, autoTest: false, autoDelete: false, listView: 'list' },
+  ui: { selected: '', tab: 'all', glass: true, sortFast: false, appMode: 'all', apps: [], metric: 'delay', updBeta: false, updAuto: true, updWifi: true, updLast: 0, logConnections: false, mode: 'vpn', bootConnect: false, allowTasker: false, vpnMtu: 1500, fakeDns: false, preferIpv6: false, autoTest: false, autoDelete: false, listView: 'list', hiddenSubs: [] },
   exit: null, // { ip, cc } of the running connection
   lanIp: null,
   geoExt: { ir: 0, ru: 0 },
@@ -136,6 +136,7 @@ async function load() {
     for (const k of ['bootConnect', 'allowTasker', 'fakeDns', 'preferIpv6', 'autoTest', 'autoDelete']) S.ui[k] = ui[k] === true;
     S.ui.vpnMtu = Number.isInteger(ui.vpnMtu) && ui.vpnMtu >= 1280 && ui.vpnMtu <= 9000 ? ui.vpnMtu : 1500;
     S.ui.listView = ui.listView === 'grid' ? 'grid' : 'list';
+    S.ui.hiddenSubs = Array.isArray(ui.hiddenSubs) ? ui.hiddenSubs.filter((id) => typeof id === 'string' && S.subs.some((x) => x.id === id)).slice(0, 100) : [];
   }
 }
 
@@ -178,9 +179,24 @@ const subOf = (s) => (s.protocol === 'group'
   : `${protoOf(s)} · ${Core.links.transportLabel(s)}`);
 const selectedServer = () => S.servers.find((s) => s.id === S.ui.selected) || null;
 
+/** Configs of subscriptions the user switched off (Subscriptions › Show in configs) stay out of the lists. */
+const subShown = (sub) => !(S.ui.hiddenSubs || []).includes(sub.id);
+const shownServers = () => { const hidden = new Set(S.ui.hiddenSubs || []); return hidden.size ? S.servers.filter((s) => !s.subId || !hidden.has(s.subId)) : S.servers; };
+
+function setSubShown(sub, on) {
+  const hidden = new Set(S.ui.hiddenSubs || []);
+  if (on) hidden.delete(sub.id); else hidden.add(sub.id);
+  S.ui.hiddenSubs = [...hidden];
+  // The chosen config was in it: the first config still shown takes its place.
+  const sel = selectedServer();
+  if (!on && sel && sel.subId === sub.id) { const next = shownServers()[0]; S.ui.selected = next ? next.id : ''; }
+  save('ui');
+  render();
+}
+
 function visibleServers() {
   let list;
-  if (S.ui.tab === 'all') list = S.servers;
+  if (S.ui.tab === 'all') list = shownServers();
   else if (S.ui.tab === 'manual') list = S.servers.filter((s) => !s.subId);
   else list = S.servers.filter((s) => s.subId === S.ui.tab);
   const q = S.searching ? S.query.trim().toLowerCase() : '';
@@ -755,17 +771,20 @@ function spinnerRing() {
 }
 
 function tabs() {
-  const items = [['all', t('all'), S.servers.length], ['manual', t('manual'), S.servers.filter((s) => !s.subId).length]];
-  for (const sub of S.subs) items.push([sub.id, sub.name || t('subLink'), S.servers.filter((s) => s.subId === sub.id).length]);
+  const manual = S.servers.filter((s) => !s.subId).length;
+  const items = [['all', t('all'), shownServers().length]];
+  // "Manual" only while there is a config added by hand; it comes back with the first one.
+  if (manual) items.push(['manual', t('manual'), manual]);
+  for (const sub of S.subs.filter(subShown)) items.push([sub.id, sub.name || t('subLink'), S.servers.filter((s) => s.subId === sub.id).length]);
   if (!items.some(([id]) => id === S.ui.tab)) S.ui.tab = 'all';
-  const i = items.findIndex(([id]) => id === S.ui.tab);
-  const n = items.length;
-  return glass('div', 'seg sm', null,
-    h('span', { class: 'seg-ind', style: { width: `calc((100% - 8px) / ${n})`, transform: `translateX(${(isRtl() ? -1 : 1) * i * 100}%)` } }),
-    items.map(([id, label, count]) => h('button', {
-      class: S.ui.tab === id ? 'on' : '', 'data-key': id,
-      onClick: () => { S.ui.tab = id; save('ui'); render(); },
-    }, `${label} `, h('span', null, num(count)))));
+  // Each tab as wide as its name (no "moha @…"); the row scrolls sideways when they don't all fit.
+  // The capsule stays still; only its inside scrolls, so its rounded edge is never cut.
+  return glass('div', 'seg sm tabs-wrap', { 'data-key': 'tabs' },
+    h('div', { class: 'tabs-scroll' },
+      items.map(([id, label, count]) => h('button', {
+        class: S.ui.tab === id ? 'on' : '', 'data-key': id,
+        onClick: () => { S.ui.tab = id; save('ui'); render(); },
+      }, h('b', null, label), h('span', null, num(count))))));
 }
 
 function delayCell(s) {
@@ -892,7 +911,7 @@ function viewSubs() {
     const warn = pct > 0.85 || (days !== null && days < 7);
     const count = S.servers.filter((s) => s.subId === sub.id).length;
     const C = 2 * Math.PI * 23;
-    return glass('article', 'card', { 'data-key': sub.id, onClick: (e) => { if (!e.target.closest('button')) openSheet({ type: 'subInfo', id: sub.id }); } },
+    return glass('article', `card ${subShown(sub) ? '' : 'sub-off'}`, { 'data-key': sub.id, onClick: (e) => { if (!e.target.closest('button')) openSheet({ type: 'subInfo', id: sub.id }); } },
       h('div', { class: 'conn-row' },
         info.total ? h('div', { class: 'ring' }, ringSvg(pct, warn, C), h('span', { class: 'mono' }, `${num(Math.round(pct * 100))}%`)) : null,
         h('div', { class: 'conn-text' },
@@ -907,7 +926,8 @@ function viewSubs() {
       h('div', { class: 'chips' },
         h('span', { class: 'chip' }, t('configsN', { n: num(count) })),
         h('span', { class: 'chip' }, t('subUpdated', { when: ago(sub.updatedAt) })),
-      ),
+        h('button', { class: 'sub-show', 'aria-label': t('subShow'), onClick: () => setSubShown(sub, !subShown(sub)) },
+          h('span', null, t('subShow')), switchEl(subShown(sub)))),
       sub.notice ? h('div', { class: 'note warn' }, icon('info', 18, 1.9), h('span', null, sub.notice)) : null);
   });
   return h('div', { class: 'page', 'data-key': 'subs' },
@@ -1393,7 +1413,20 @@ function render() {
     frame = 0;
     mount(root, view());
     syncListTop();
+    showChosenTab();
   });
+}
+
+/** The chosen config tab, when the row scrolls sideways, is kept fully in sight. */
+function showChosenTab() {
+  const row = root.querySelector('.tabs-scroll');
+  const on = row && row.querySelector('button.on');
+  if (!on) return;
+  const r = row.getBoundingClientRect();
+  const b = on.getBoundingClientRect();
+  // 16 px from the edges, clear of their fade.
+  if (b.left < r.left + 16) row.scrollLeft -= r.left + 16 - b.left;
+  else if (b.right > r.right - 16) row.scrollLeft += b.right - (r.right - 16);
 }
 
 /** The list scrolls under the fixed top part; its first row starts right below it. */
