@@ -3,7 +3,7 @@
 <details open>
 <summary><b>English</b></summary>
 
-A fast, private proxy client for Windows, built on Xray, sing-box and (optionally) mihomo.
+A fast, private proxy client for Windows and macOS, built on Xray, sing-box and (optionally) mihomo.
 
 ![Best](docs/screenshots/servers-en.png)
 
@@ -11,8 +11,9 @@ A fast, private proxy client for Windows, built on Xray, sing-box and (optionall
 
 - `Best-Setup-vX.Y.Z.exe`: installer for all users (Program Files)
 - `Best-vX.Y.Z-portable.zip`: portable copy (all data stays in its `data` folder)
+- `Best-vX.Y.Z-mac-arm64.dmg` / `-mac-x64.dmg`: Mac with Apple Silicon / Intel (see [macOS](#macos))
 
-**Everything is included:** the Xray and sing-box cores come inside the installer and the portable copy, so there is nothing else to download. The optional mihomo core installs with one click on the *Updates* page.
+**Everything is included:** the Xray and sing-box cores come inside the installer, the portable copy and the Mac dmg, so there is nothing else to download. The optional mihomo core installs with one click on the *Updates* page.
 
 The SHA-256 of each file is shown next to it on the release page. Best checks it before it installs an update.
 
@@ -29,7 +30,7 @@ The SHA-256 of each file is shown next to it on the release page. Best checks it
 
 ### macOS
 
-Best for macOS 12 (Monterey) and newer, on Apple Silicon (M1 and later) and Intel Macs. It looks and works the same as on Windows, TUN included. The macOS files are on the release page starting with the next release.
+Best for macOS 12 (Monterey) and newer, on Apple Silicon (M1 and later) and Intel Macs. It looks and works the same as on Windows, TUN included.
 
 - `Best-vX.Y.Z-mac-arm64.dmg`: Apple Silicon (M1, M2, M3, M4 and later)
 - `Best-vX.Y.Z-mac-x64.dmg`: Intel
@@ -71,7 +72,7 @@ The core programs are not kept in the repository. Download them from their own r
 - [Xray-core](https://github.com/XTLS/Xray-core/releases) (`Xray-windows-64.zip`): copy `xray.exe`, `geoip.dat`, `geosite.dat` and `LICENSE` to `resources\cores\xray`
 - [sing-box](https://github.com/SagerNet/sing-box/releases) (`sing-box-…-windows-amd64.zip`): copy `sing-box.exe`, `libcronet.dll` and `LICENSE` to `resources\cores\sing-box`
 
-Best 1.0.4 ships Xray 26.11.9 and sing-box 1.14.4.
+Best 1.0.5 ships Xray 26.11.9 and sing-box 1.14.4.
 
 - `npm start` runs Best.
 - `npm test` runs the unit and fuzz tests. `npm run test:ui`, `test:perf` and `test:soak` drive the app itself.
@@ -87,7 +88,7 @@ Best is free software under the [GNU General Public License v3.0 or later](LICEN
 <details>
 <summary><b>Русский</b></summary>
 
-Быстрый и приватный прокси-клиент для Windows на основе ядер Xray и sing-box. Ядро mihomo можно установить дополнительно.
+Быстрый и приватный прокси-клиент для Windows и macOS на основе ядер Xray и sing-box. Ядро mihomo можно установить дополнительно.
 
 ![Best](docs/screenshots/servers-ru.png)
 
@@ -95,8 +96,9 @@ Best is free software under the [GNU General Public License v3.0 or later](LICEN
 
 - `Best-Setup-vX.Y.Z.exe`: установка для всех пользователей (в Program Files)
 - `Best-vX.Y.Z-portable.zip`: портативная версия (все данные хранятся в папке `data` рядом с программой)
+- `Best-vX.Y.Z-mac-arm64.dmg` / `-mac-x64.dmg`: Mac с Apple Silicon / Intel (см. раздел macOS ниже)
 
-**Всё уже внутри:** ядра Xray и sing-box входят в установщик и портативную версию, больше ничего скачивать не нужно. Дополнительное ядро mihomo ставится в один клик на странице *Обновления*.
+**Всё уже внутри:** ядра Xray и sing-box входят в установщик, портативную версию и dmg для Mac, больше ничего скачивать не нужно. Дополнительное ядро mihomo ставится в один клик на странице *Обновления*.
 
 Контрольная сумма SHA-256 каждого файла указана на странице релиза. Best проверяет её перед установкой обновления.
 
@@ -113,7 +115,7 @@ Best is free software under the [GNU General Public License v3.0 or later](LICEN
 
 ### macOS
 
-Best для macOS 12 (Monterey) и новее, на Mac с Apple Silicon (M1 и новее) и Intel. Выглядит и работает так же, как в Windows, включая TUN. Файлы для macOS появятся на странице релиза начиная со следующего выпуска.
+Best для macOS 12 (Monterey) и новее, на Mac с Apple Silicon (M1 и новее) и Intel. Выглядит и работает так же, как в Windows, включая TUN.
 
 - `Best-vX.Y.Z-mac-arm64.dmg`: Apple Silicon (M1, M2, M3, M4 и новее)
 - `Best-vX.Y.Z-mac-x64.dmg`: Intel
@@ -155,7 +157,7 @@ npm install
 - [Xray-core](https://github.com/XTLS/Xray-core/releases) (`Xray-windows-64.zip`): скопируйте `xray.exe`, `geoip.dat`, `geosite.dat` и `LICENSE` в `resources\cores\xray`
 - [sing-box](https://github.com/SagerNet/sing-box/releases) (`sing-box-…-windows-amd64.zip`): скопируйте `sing-box.exe`, `libcronet.dll` и `LICENSE` в `resources\cores\sing-box`
 
-В Best 1.0.4 входят Xray 26.11.9 и sing-box 1.14.4.
+В Best 1.0.5 входят Xray 26.11.9 и sing-box 1.14.4.
 
 - `npm start` запускает Best.
 - `npm test` запускает модульные и фазз-тесты. `npm run test:ui`, `test:perf` и `test:soak` проверяют само приложение.
@@ -173,7 +175,7 @@ Best — свободная программа под лицензией [GNU Ge
 
 <div dir="rtl">
 
-برنامه‌ی Best یک پروکسی سریع و امن برای ویندوز است که با هسته‌های Xray و sing-box کار می‌کند. هسته‌ی mihomo را هم می‌توان به‌دلخواه نصب کرد.
+برنامه‌ی Best یک پروکسی سریع و امن برای ویندوز و مک است که با هسته‌های Xray و sing-box کار می‌کند. هسته‌ی mihomo را هم می‌توان به‌دلخواه نصب کرد.
 
 ![Best](docs/screenshots/servers-fa.png)
 
@@ -181,8 +183,9 @@ Best — свободная программа под лицензией [GNU Ge
 
 - نصب برای همه‌ی کاربرها (در Program Files): <code dir="ltr">Best-Setup-vX.Y.Z.exe</code>
 - نسخه‌ی پرتابل، همه‌ی داده‌ها کنار خود برنامه در پوشه‌ی <code dir="ltr">data</code> می‌ماند: <code dir="ltr">Best-vX.Y.Z-portable.zip</code>
+- مک با Apple Silicon یا اینتل (بخش مک پایین‌تر): <code dir="ltr">Best-vX.Y.Z-mac-arm64.dmg</code> یا <code dir="ltr">-mac-x64.dmg</code>
 
-**همه‌چیز همراه برنامه است:** هسته‌های Xray و sing-box داخل نصب‌کننده و نسخه‌ی پرتابل هستند و لازم نیست چیز دیگری دانلود کنید. هسته‌ی اختیاری mihomo هم با یک کلیک در صفحه‌ی *به‌روزرسانی* نصب می‌شود.
+**همه‌چیز همراه برنامه است:** هسته‌های Xray و sing-box داخل نصب‌کننده، نسخه‌ی پرتابل و dmg مک هستند و لازم نیست چیز دیگری دانلود کنید. هسته‌ی اختیاری mihomo هم با یک کلیک در صفحه‌ی *به‌روزرسانی* نصب می‌شود.
 
 هش SHA-256 هر فایل در صفحه‌ی نسخه کنار آن آمده است و Best پیش از نصب هر به‌روزرسانی آن را بررسی می‌کند.
 
@@ -199,7 +202,7 @@ Best — свободная программа под лицензией [GNU Ge
 
 ### مک (macOS)
 
-برنامه‌ی Best برای macOS 12 (Monterey) و بالاتر، روی مک‌های Apple Silicon (M1 و جدیدتر) و اینتل. ظاهر و کارش مثل نسخه‌ی ویندوز است، TUN هم دارد. فایل‌های مک از نسخه‌ی بعدی در صفحه‌ی انتشار قرار می‌گیرند.
+برنامه‌ی Best برای macOS 12 (Monterey) و بالاتر، روی مک‌های Apple Silicon (M1 و جدیدتر) و اینتل. ظاهر و کارش مثل نسخه‌ی ویندوز است، TUN هم دارد.
 
 - مک‌های Apple Silicon (M1، M2، M3، M4 و جدیدتر): <code dir="ltr">Best-vX.Y.Z-mac-arm64.dmg</code>
 - مک‌های اینتل: <code dir="ltr">Best-vX.Y.Z-mac-x64.dmg</code>
@@ -245,7 +248,7 @@ npm install
 - از [Xray-core](https://github.com/XTLS/Xray-core/releases) فایل <code dir="ltr">Xray-windows-64.zip</code>: فایل‌های <code dir="ltr">xray.exe</code>، <code dir="ltr">geoip.dat</code>، <code dir="ltr">geosite.dat</code> و <code dir="ltr">LICENSE</code> را در <code dir="ltr">resources\cores\xray</code> بگذارید.
 - از [sing-box](https://github.com/SagerNet/sing-box/releases) فایل <code dir="ltr">sing-box-…-windows-amd64.zip</code>: فایل‌های <code dir="ltr">sing-box.exe</code>، <code dir="ltr">libcronet.dll</code> و <code dir="ltr">LICENSE</code> را در <code dir="ltr">resources\cores\sing-box</code> بگذارید.
 
-نسخه‌ی 1.0.4 برنامه با Xray 26.11.9 و sing-box 1.14.4 منتشر شده است.
+نسخه‌ی 1.0.5 برنامه با Xray 26.11.9 و sing-box 1.14.4 منتشر شده است.
 
 - دستور <code dir="ltr">npm start</code> برنامه را اجرا می‌کند.
 - دستور <code dir="ltr">npm test</code> تست‌های واحد و تست‌های بازی (fuzz) را اجرا می‌کند. دستورهای <code dir="ltr">npm run test:ui</code>، <code dir="ltr">test:perf</code> و <code dir="ltr">test:soak</code> خود برنامه را آزمایش می‌کنند.
@@ -263,7 +266,7 @@ npm install
 <details>
 <summary><b>中文</b></summary>
 
-Best 是一款快速、注重隐私的 Windows 代理客户端，基于 Xray 和 sing-box 内核，也可以另外安装 mihomo 内核。
+Best 是一款快速、注重隐私的 Windows 和 macOS 代理客户端，基于 Xray 和 sing-box 内核，也可以另外安装 mihomo 内核。
 
 ![Best](docs/screenshots/servers-zh.png)
 
@@ -271,8 +274,9 @@ Best 是一款快速、注重隐私的 Windows 代理客户端，基于 Xray 和
 
 - `Best-Setup-vX.Y.Z.exe`：为所有用户安装（Program Files）
 - `Best-vX.Y.Z-portable.zip`：便携版（所有数据都保存在它的 `data` 文件夹中）
+- `Best-vX.Y.Z-mac-arm64.dmg` / `-mac-x64.dmg`：Apple Silicon / Intel Mac（见下方 macOS 部分）
 
-**一切都已包含：** 安装程序和便携版已内置 Xray 和 sing-box 内核，无需另外下载。可选的 mihomo 内核可在“更新”页面一键安装。
+**一切都已包含：** 安装程序、便携版和 Mac dmg 已内置 Xray 和 sing-box 内核，无需另外下载。可选的 mihomo 内核可在“更新”页面一键安装。
 
 每个文件的 SHA-256 校验值显示在发布页面上，Best 在安装更新前会先校验。
 
@@ -289,7 +293,7 @@ Best 是一款快速、注重隐私的 Windows 代理客户端，基于 Xray 和
 
 ### macOS
 
-Best 支持 macOS 12（Monterey）及更新版本，适用于 Apple Silicon（M1 及更新）和 Intel Mac。外观和功能与 Windows 版相同，也支持 TUN。macOS 文件将从下一个版本开始出现在发布页面上。
+Best 支持 macOS 12（Monterey）及更新版本，适用于 Apple Silicon（M1 及更新）和 Intel Mac。外观和功能与 Windows 版相同，也支持 TUN。
 
 - `Best-vX.Y.Z-mac-arm64.dmg`：Apple Silicon（M1、M2、M3、M4 及更新）
 - `Best-vX.Y.Z-mac-x64.dmg`：Intel
@@ -331,7 +335,7 @@ npm install
 - [Xray-core](https://github.com/XTLS/Xray-core/releases)（`Xray-windows-64.zip`）：将 `xray.exe`、`geoip.dat`、`geosite.dat` 和 `LICENSE` 复制到 `resources\cores\xray`
 - [sing-box](https://github.com/SagerNet/sing-box/releases)（`sing-box-…-windows-amd64.zip`）：将 `sing-box.exe`、`libcronet.dll` 和 `LICENSE` 复制到 `resources\cores\sing-box`
 
-Best 1.0.4 附带 Xray 26.11.9 和 sing-box 1.14.4。
+Best 1.0.5 附带 Xray 26.11.9 和 sing-box 1.14.4。
 
 - `npm start` 运行 Best。
 - `npm test` 运行单元测试和模糊测试。`npm run test:ui`、`test:perf` 和 `test:soak` 对应用本身进行测试。
