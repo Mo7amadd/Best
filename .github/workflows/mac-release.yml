@@ -1,0 +1,104 @@
+# Builds the macOS files of a release on GitHub's Mac machines and adds them to that release's draft.
+# Run by hand ("Run workflow") with the tag, after the tag is pushed and publish.ps1 made the draft.
+# Each Mac is tested the same way as in mac.yml before anything is uploaded; nothing is uploaded to a
+# release that is already published. publish.ps1 then puts these files' SHA-256 into SHA256SUMS
+# (Best's own update checks it) and publishes the release.
+name: macOS release files
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (vX.Y.Z); its draft must exist
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mac-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-26
+          - arch: x64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      ARCH: ${{ matrix.arch }}
+      TAG: ${{ inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Check the tag and its draft
+        run: |
+          case "$TAG" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "not a release tag: $TAG"; exit 1;; esac
+          draft=$(gh release view "$TAG" --json isDraft --jq .isDraft)
+          [ "$draft" = "true" ] || { echo "the release $TAG is not a draft (or does not exist)"; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          persist-credentials: false
+      - name: The version in package.json is the tag's
+        run: |
+          v=$(node -p "require('./package.json').version")
+          [ "v$v" = "$TAG" ] || { echo "package.json says $v, tag is $TAG"; exit 1; }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install
+        run: |
+          npm ci
+          node node_modules/electron/install.js
+      - name: Unit tests
+        run: npm test
+      - name: Fonts, icons, the hash-checked macOS cores and the TUN helper
+        run: |
+          npm run fonts
+          npm run icons
+          node scripts/fetch-mac-cores.js "$ARCH"
+          node scripts/build-mac-helper.js "$ARCH"
+      - name: Interface tests
+        run: npm run test:ui
+      - name: Build dmg and zip (free ad-hoc signature)
+        run: npx electron-builder --mac "--$ARCH" --publish never
+      - name: Check the built app
+        timeout-minutes: 15
+        run: node test/mac/smoke.mjs "$ARCH" "dist/smoke-$ARCH"
+      - name: Keep the report and screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: report-mac-${{ matrix.arch }}
+          retention-days: 7
+          if-no-files-found: ignore
+          path: dist/smoke-*/
+      - name: Add the dmg and zip to the draft
+        run: |
+          v="${TAG#v}"
+          files="dist/Best-v$v-mac-$ARCH.dmg dist/Best-v$v-mac-$ARCH.zip"
+          for f in $files; do [ -f "$f" ] || { echo "missing $f"; exit 1; }; done
+          shasum -a 256 $files
+          draft=$(gh release view "$TAG" --json isDraft --jq .isDraft)
+          [ "$draft" = "true" ] || { echo "the release was published meanwhile; nothing uploaded"; exit 1; }
+          gh release upload "$TAG" $files --clobber
+          # GitHub's own checksum of each uploaded file must be the one built here. A draft is not
+          # found by its tag through the API, so by its id.
+          id=$(gh api "repos/$GH_REPO/releases" --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n 1)
+          for f in $files; do
+            want="sha256:$(shasum -a 256 "$f" | cut -d' ' -f1)"
+            have=$(gh api "repos/$GH_REPO/releases/$id/assets" --jq ".[] | select(.name == \"$(basename "$f")\") | .digest")
+            [ "$have" = "$want" ] || { echo "$(basename "$f"): uploaded $have, built $want"; exit 1; }
+            echo "$(basename "$f") uploaded and checked"
+          done
