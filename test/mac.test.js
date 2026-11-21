@@ -186,6 +186,46 @@ test('package: the macOS build takes its own cores, signs for free (ad-hoc) and 
   for (const s of ['off', 'on', 'tun']) assert.ok(fs.existsSync(path.join(__dirname, '..', 'resources', 'icons', `mac-${s}Template@2x.png`)));
 });
 
+test('TUN helper: the password prompt gets every argument as one quoted piece', () => {
+  const s = P.appleScriptAdmin(['/bin/sh', '/Applications/My "Best".app/Contents/Resources/helper/install.sh', 'a\\b', '501'], 'Best wants to install its TUN helper.');
+  assert.strictEqual(s, 'do shell script quoted form of "/bin/sh" & " " & quoted form of "/Applications/My \\"Best\\".app/Contents/Resources/helper/install.sh" & " " & quoted form of "a\\\\b" & " " & quoted form of "501" with prompt "Best wants to install its TUN helper." with administrator privileges');
+  // a line break cannot end the AppleScript text early: it is written as \n inside the text
+  const multi = P.appleScriptAdmin(['/bin/sh', '-c', 'echo a\r\necho "b"'], 'p');
+  assert.ok(!/[\r\n]/.test(multi));
+  assert.ok(multi.includes('quoted form of "echo a\\necho \\"b\\""'));
+  assert.throws(() => P.appleScriptAdmin([], 'p'));
+  assert.throws(() => P.appleScriptAdmin(['/bin/sh', 'a\0b'], 'p'));
+});
+
+test('TUN for the macOS helper: the Windows adapter name goes, nothing else changes', () => {
+  const cfg = buildTunConfig({ ...DEFAULT_SETTINGS, tunCorePaths: ['/Applications/Best.app/Contents/Resources/cores/xray/xray'] });
+  const mac = P.macTunConfig(cfg);
+  assert.strictEqual(cfg.inbounds[0].interface_name, 'BestTun', 'the original was changed');
+  assert.ok(!('interface_name' in mac.inbounds[0]));
+  delete cfg.inbounds[0].interface_name;
+  assert.deepStrictEqual(mac, cfg);
+  // what the helper accepts (helper/mac/BestTunHelper.swift): these parts only, no file anywhere
+  assert.deepStrictEqual(Object.keys(mac).sort(), ['dns', 'inbounds', 'log', 'outbounds', 'route']);
+  assert.ok(mac.outbounds.every((o) => ['socks', 'direct', 'block'].includes(o.type)));
+  assert.ok(mac.outbounds.filter((o) => o.type === 'socks').every((o) => o.server === '127.0.0.1'));
+  assert.ok(!JSON.stringify(mac).includes('"output"') && !JSON.stringify(mac).includes('rule_set'));
+});
+
+test('package: the TUN helper and its scripts go into the Mac app only', () => {
+  const b = require('../package.json').build;
+  assert.ok(b.mac.extraResources.some((r) => r.from === 'resources/helper-mac-${arch}' && r.to === 'helper'));
+  assert.ok(!b.extraResources.some((r) => /helper/.test(r.from)) && !b.win.extraResources.some((r) => /helper/.test(r.from)));
+  for (const f of ['BestTunHelper.swift', 'install.sh', 'uninstall.sh']) assert.ok(fs.existsSync(path.join(__dirname, '..', 'helper', 'mac', f)), `${f} missing`);
+  // the version the app expects is the one the helper reports
+  const swift = fs.readFileSync(path.join(__dirname, '..', 'helper', 'mac', 'BestTunHelper.swift'), 'utf8');
+  const js = fs.readFileSync(path.join(__dirname, '..', 'electron', 'mac', 'tun.js'), 'utf8');
+  assert.strictEqual((/helperVersion = "(\d+)"/.exec(swift) || [])[1], (/HELPER_VERSION = '(\d+)'/.exec(js) || [])[1]);
+  // the socket path and the folder are the same in the app, the helper and the scripts
+  assert.ok(swift.includes('/var/run/com.best.client.tun.socket') && js.includes('/var/run/com.best.client.tun.socket'));
+  const install = fs.readFileSync(path.join(__dirname, '..', 'helper', 'mac', 'install.sh'), 'utf8');
+  assert.ok(swift.includes('/Library/PrivilegedHelperTools/com.best.client.tun') && install.includes('dir=/Library/PrivilegedHelperTools/$label'));
+});
+
 // ------------------------------------------------------------------ on a Mac only
 
 test('on a Mac: networksetup lists services and parses; ps shows this test with its path', { skip: !ON_MAC }, () => {

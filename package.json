@@ -18,7 +18,7 @@
     "fonts": "node scripts/copy-fonts.js",
     "icons": "node scripts/make-icons.js",
     "dist": "npm run fonts && npm run icons && electron-builder --win nsis && node scripts/make-portable.js",
-    "dist:mac": "npm run fonts && npm run icons && node scripts/fetch-mac-cores.js && electron-builder --mac",
+    "dist:mac": "npm run fonts && npm run icons && node scripts/fetch-mac-cores.js && node scripts/build-mac-helper.js && electron-builder --mac",
     "art": "electron scripts/make-installer-art.js",
     "test:ui": "node test/ui/run.mjs",
     "test:perf": "node test/ui/perf.mjs",
@@ -128,6 +128,10 @@
         {
           "from": "resources/cores-mac-${arch}",
           "to": "cores"
+        },
+        {
+          "from": "resources/helper-mac-${arch}",
+          "to": "helper"
         },
         {
           "from": "resources/icons",

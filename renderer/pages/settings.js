@@ -515,13 +515,16 @@ function buildPages() {
           h('div', { class: 'row' }, button(t('uwp_choose'), { icon: 'edit', onClick: storeAppsDialog }))),
       ]],
       ['TUN', [
-        h('div', { class: `note ${S.isAdmin ? 'good' : 'warn'}` }, icon(S.isAdmin ? 'check' : 'alert', 16),
-          h('span', { class: 'grow' }, S.isAdmin ? t('adminYes') : t('adminNo')),
-          S.isAdmin || IS_MAC ? null : button(t('runAsAdmin'), { size: 'sm', onClick: () => api.relaunchAdmin() })),
+        // Windows: Best runs as administrator or not. macOS: the TUN helper service is installed or not
+        // (or comes from an older Best and has to be installed again).
+        h('div', { class: `note ${S.tunAvailable ? 'good' : 'warn'}` }, icon(S.tunAvailable ? 'check' : 'alert', 16),
+          h('span', { class: 'grow' }, S.tunAvailable ? t('adminYes') : t(IS_MAC && S.tunHelper === 'outdated' ? 'tunHelperOutdated' : 'adminNo')),
+          S.tunAvailable ? null : button(t('runAsAdmin'), { size: 'sm', onClick: () => api.relaunchAdmin() }),
+          IS_MAC && S.tunAvailable ? button(t('tunHelperRemove'), { size: 'sm', variant: 'ghost', onClick: () => run(() => api.removeTunHelper()) }) : null),
         S.secureCores === false ? h('div', { class: 'note warn' }, icon('alert', 16), h('span', null, t(S.portable ? 'tunPortableWarn' : 'tunUserInstallWarn'))) : null,
         card(null,
           h('div', null,
-            switchRow('tun', t('tunMode'), t('tun_help'), { disabled: !S.isAdmin }),
+            switchRow('tun', t('tunMode'), t('tun_help'), { disabled: !S.tunAvailable }),
             switchRow('tunIpv6', t('tunIpv6'), t('tunIpv6_d'))),
           fieldK('tunExclude', t('tunExclude'), textArea('tunExclude', 3, '192.168.0.0/16\n203.0.113.10'), { help: t('tunExclude_help') }),
           adv('tun', t('adv_tun'),

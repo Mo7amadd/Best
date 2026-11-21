@@ -29,7 +29,7 @@ The SHA-256 of each file is shown next to it on the release page. Best checks it
 
 ### macOS
 
-Best for macOS 12 (Monterey) and newer, on Apple Silicon (M1 and later) and Intel Macs. It looks and works the same as on Windows. The macOS files are on the release page starting with the next release.
+Best for macOS 12 (Monterey) and newer, on Apple Silicon (M1 and later) and Intel Macs. It looks and works the same as on Windows, TUN included. The macOS files are on the release page starting with the next release.
 
 - `Best-vX.Y.Z-mac-arm64.dmg`: Apple Silicon (M1, M2, M3, M4 and later)
 - `Best-vX.Y.Z-mac-x64.dmg`: Intel
@@ -38,6 +38,8 @@ Best for macOS 12 (Monterey) and newer, on Apple Silicon (M1 and later) and Inte
 Not sure which Mac you have? Apple menu › *About This Mac*: "Chip" means Apple Silicon, "Processor … Intel" means Intel.
 
 Open the dmg and drag Best to *Applications*. Best has no paid Apple signature, so the first time macOS will not open it: press *Done*, then press *Open Anyway* in *System Settings › Privacy & Security*. The dmg has a short guide with these steps.
+
+TUN on macOS uses a small helper service that runs as root. Best installs it the first time you turn TUN on (macOS asks for your password once), and the helper can be removed in the settings. Best itself never runs as root.
 
 ### Android (test version)
 
@@ -74,7 +76,7 @@ Best 1.0.4 ships Xray 26.11.9 and sing-box 1.14.4.
 - `npm start` runs Best.
 - `npm test` runs the unit and fuzz tests. `npm run test:ui`, `test:perf` and `test:soak` drive the app itself.
 - `npm run dist` builds the installer and the portable copy in `dist`.
-- On a Mac (macOS 12 or newer with the Xcode Command Line Tools), `npm run dist:mac` downloads the macOS cores (each checked by SHA-256) and makes the dmg and zip files in `dist`.
+- On a Mac (macOS 12 or newer with the Xcode Command Line Tools), `npm run dist:mac` downloads the macOS cores (each checked by SHA-256), builds the TUN helper and makes the dmg and zip files in `dist`.
 
 ### License
 
@@ -111,7 +113,7 @@ Best is free software under the [GNU General Public License v3.0 or later](LICEN
 
 ### macOS
 
-Best для macOS 12 (Monterey) и новее, на Mac с Apple Silicon (M1 и новее) и Intel. Выглядит и работает так же, как в Windows. Файлы для macOS появятся на странице релиза начиная со следующего выпуска.
+Best для macOS 12 (Monterey) и новее, на Mac с Apple Silicon (M1 и новее) и Intel. Выглядит и работает так же, как в Windows, включая TUN. Файлы для macOS появятся на странице релиза начиная со следующего выпуска.
 
 - `Best-vX.Y.Z-mac-arm64.dmg`: Apple Silicon (M1, M2, M3, M4 и новее)
 - `Best-vX.Y.Z-mac-x64.dmg`: Intel
@@ -120,6 +122,8 @@ Best для macOS 12 (Monterey) и новее, на Mac с Apple Silicon (M1 и 
 Не знаете, какой у вас Mac? Меню Apple › *Об этом Mac*: «Чип» означает Apple Silicon, «Процессор … Intel» означает Intel.
 
 Откройте dmg и перетащите Best в *Applications*. У Best нет платной подписи Apple, поэтому в первый раз macOS не откроет его: нажмите *Готово*, затем *Всё равно открыть* в *Системные настройки › Конфиденциальность и безопасность*. В dmg есть короткая инструкция с этими шагами.
+
+TUN в macOS работает через небольшую вспомогательную службу с правами root. Best устанавливает её при первом включении TUN (macOS один раз спросит пароль), удалить её можно в настройках. Сам Best никогда не работает с правами root.
 
 ### Android (тестовая версия)
 
@@ -156,7 +160,7 @@ npm install
 - `npm start` запускает Best.
 - `npm test` запускает модульные и фазз-тесты. `npm run test:ui`, `test:perf` и `test:soak` проверяют само приложение.
 - `npm run dist` собирает установщик и портативную версию в папке `dist`.
-- На Mac (macOS 12 или новее с Xcode Command Line Tools) `npm run dist:mac` скачивает ядра для macOS (каждое проверяется по SHA-256) и создаёт файлы dmg и zip в папке `dist`.
+- На Mac (macOS 12 или новее с Xcode Command Line Tools) `npm run dist:mac` скачивает ядра для macOS (каждое проверяется по SHA-256), собирает вспомогательную службу TUN и создаёт файлы dmg и zip в папке `dist`.
 
 ### Лицензия
 
@@ -195,7 +199,7 @@ Best — свободная программа под лицензией [GNU Ge
 
 ### مک (macOS)
 
-برنامه‌ی Best برای macOS 12 (Monterey) و بالاتر، روی مک‌های Apple Silicon (M1 و جدیدتر) و اینتل. ظاهر و کارش مثل نسخه‌ی ویندوز است. فایل‌های مک از نسخه‌ی بعدی در صفحه‌ی انتشار قرار می‌گیرند.
+برنامه‌ی Best برای macOS 12 (Monterey) و بالاتر، روی مک‌های Apple Silicon (M1 و جدیدتر) و اینتل. ظاهر و کارش مثل نسخه‌ی ویندوز است، TUN هم دارد. فایل‌های مک از نسخه‌ی بعدی در صفحه‌ی انتشار قرار می‌گیرند.
 
 - مک‌های Apple Silicon (M1، M2، M3، M4 و جدیدتر): <code dir="ltr">Best-vX.Y.Z-mac-arm64.dmg</code>
 - مک‌های اینتل: <code dir="ltr">Best-vX.Y.Z-mac-x64.dmg</code>
@@ -204,6 +208,8 @@ Best — свободная программа под лицензией [GNU Ge
 نمی‌دانید مک شما کدام است؟ منوی سیب › *About This Mac*: اگر «Chip» نوشته Apple Silicon است و اگر «Processor … Intel» نوشته اینتل.
 
 فایل dmg را باز کنید و Best را روی *Applications* بکشید. Best امضای پولی اپل ندارد، پس بار اول مک آن را باز نمی‌کند: دکمه‌ی *Done* را بزنید و بعد در *System Settings › Privacy & Security* دکمه‌ی *Open Anyway* را بزنید. راهنمای کوتاه همین مرحله‌ها داخل خود dmg هم هست.
+
+حالت TUN در مک با یک سرویس کمکی کوچک کار می‌کند که با دسترسی root اجرا می‌شود. Best بار اولی که TUN را روشن کنید آن را نصب می‌کند (مک یک بار رمز را می‌پرسد) و از تنظیمات می‌شود پاکش کرد. خود Best هیچ‌وقت با دسترسی root اجرا نمی‌شود.
 
 ### اندروید (نسخه‌ی آزمایشی)
 
@@ -244,7 +250,7 @@ npm install
 - دستور <code dir="ltr">npm start</code> برنامه را اجرا می‌کند.
 - دستور <code dir="ltr">npm test</code> تست‌های واحد و تست‌های بازی (fuzz) را اجرا می‌کند. دستورهای <code dir="ltr">npm run test:ui</code>، <code dir="ltr">test:perf</code> و <code dir="ltr">test:soak</code> خود برنامه را آزمایش می‌کنند.
 - دستور <code dir="ltr">npm run dist</code> نصب‌کننده و نسخه‌ی پرتابل را در پوشه‌ی <code dir="ltr">dist</code> می‌سازد.
-- روی مک (macOS 12 یا بالاتر با Xcode Command Line Tools) دستور <code dir="ltr">npm run dist:mac</code> هسته‌های مک را دانلود می‌کند (هر کدام با SHA-256 بررسی می‌شود) و فایل‌های dmg و zip را در پوشه‌ی <code dir="ltr">dist</code> می‌سازد.
+- روی مک (macOS 12 یا بالاتر با Xcode Command Line Tools) دستور <code dir="ltr">npm run dist:mac</code> هسته‌های مک را دانلود می‌کند (هر کدام با SHA-256 بررسی می‌شود)، سرویس کمکی TUN را می‌سازد و فایل‌های dmg و zip را در پوشه‌ی <code dir="ltr">dist</code> می‌سازد.
 
 ### مجوز
 
@@ -283,7 +289,7 @@ Best 是一款快速、注重隐私的 Windows 代理客户端，基于 Xray 和
 
 ### macOS
 
-Best 支持 macOS 12（Monterey）及更新版本，适用于 Apple Silicon（M1 及更新）和 Intel Mac。外观和功能与 Windows 版相同。macOS 文件将从下一个版本开始出现在发布页面上。
+Best 支持 macOS 12（Monterey）及更新版本，适用于 Apple Silicon（M1 及更新）和 Intel Mac。外观和功能与 Windows 版相同，也支持 TUN。macOS 文件将从下一个版本开始出现在发布页面上。
 
 - `Best-vX.Y.Z-mac-arm64.dmg`：Apple Silicon（M1、M2、M3、M4 及更新）
 - `Best-vX.Y.Z-mac-x64.dmg`：Intel
@@ -292,6 +298,8 @@ Best 支持 macOS 12（Monterey）及更新版本，适用于 Apple Silicon（M1
 不确定你的 Mac 是哪种？苹果菜单 ›“关于本机”：显示“芯片”的是 Apple Silicon，显示“处理器 … Intel”的是 Intel。
 
 打开 dmg，将 Best 拖到“应用程序”（Applications）。Best 没有付费的 Apple 签名，所以第一次 macOS 不会打开它：点击“完成”，然后在“系统设置 › 隐私与安全性”中点击“仍要打开”。dmg 中附有这些步骤的简短说明。
+
+macOS 上的 TUN 通过一个以 root 权限运行的小型辅助服务工作。第一次开启 TUN 时 Best 会安装它（macOS 只询问一次密码），也可以在设置中移除它。Best 本身从不以 root 权限运行。
 
 ### Android（测试版）
 
@@ -328,7 +336,7 @@ Best 1.0.4 附带 Xray 26.11.9 和 sing-box 1.14.4。
 - `npm start` 运行 Best。
 - `npm test` 运行单元测试和模糊测试。`npm run test:ui`、`test:perf` 和 `test:soak` 对应用本身进行测试。
 - `npm run dist` 在 `dist` 中构建安装程序和便携版。
-- 在 Mac 上（macOS 12 或更新版本，并已安装 Xcode Command Line Tools），`npm run dist:mac` 会下载 macOS 内核（每个都经过 SHA-256 校验），并在 `dist` 中生成 dmg 和 zip 文件。
+- 在 Mac 上（macOS 12 或更新版本，并已安装 Xcode Command Line Tools），`npm run dist:mac` 会下载 macOS 内核（每个都经过 SHA-256 校验）、构建 TUN 辅助服务，并在 `dist` 中生成 dmg 和 zip 文件。
 
 ### 许可证
 

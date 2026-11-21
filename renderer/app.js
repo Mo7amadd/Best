@@ -13,7 +13,7 @@ import { installShortcuts, showShortcuts } from './shortcuts.js';
 
 const api = window.best;
 
-export const S = { settings: null, routing: null, servers: [], subs: [], core: {}, activeId: '', isAdmin: false, encrypted: true, exitInfo: null, secureCores: true, portable: false, version: '' };
+export const S = { settings: null, routing: null, servers: [], subs: [], core: {}, activeId: '', isAdmin: false, tunAvailable: false, tunHelper: '', encrypted: true, exitInfo: null, secureCores: true, portable: false, version: '' };
 export const ui = {
   page: 'servers',
   group: localGet('group', 'all'),

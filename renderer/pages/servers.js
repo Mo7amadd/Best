@@ -48,8 +48,8 @@ function connectionCard() {
     h('span', { class: 'section-label', id: 'tun-label' }, t('tunMode')),
     h('button', {
       type: 'button', class: 'tun-btn', role: 'switch', 'aria-checked': String(st.tun), 'aria-labelledby': 'tun-label',
-      disabled: !S.isAdmin,
-      title: !S.isAdmin && IS_MAC ? t('tunNeedsAdmin') : undefined, // why it is off on macOS
+      disabled: !S.tunAvailable,
+      title: !S.tunAvailable && IS_MAC ? t('tunNeedsAdmin') : undefined, // why it is off on macOS
       onClick: () => run(() => api.setSettings({ tun: !st.tun })),
     }, h('span', { class: 'switch', 'aria-hidden': 'true', 'aria-checked': String(st.tun) }, h('span', { class: 'switch-knob' })), st.tun ? t('on') : t('off')));
 
@@ -81,8 +81,8 @@ function connectionCard() {
       // means, and the way to TUN.
       h('div', { class: 'conn-notes' },
         h('span', { class: 'help' }, help),
-        // macOS has no "run as administrator" (TUN there will use a helper service).
-        !S.isAdmin && !IS_MAC ? h('button', { type: 'button', class: 'link-btn', onClick: () => api.relaunchAdmin() }, t('runAsAdmin')) : null)));
+        // the way to TUN: "Run as administrator" on Windows, "Install helper service" on macOS
+        !S.tunAvailable ? h('button', { type: 'button', class: 'link-btn', onClick: () => api.relaunchAdmin() }, t('runAsAdmin')) : null)));
 }
 
 /** "Exit IP 🇩🇪 1.2.3.4": the address websites see (checked through the tunnel after connecting). */

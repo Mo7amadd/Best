@@ -120,6 +120,11 @@ function loadEncryptedStateAsking() {
 }
 
 let isAdmin = false;
+// macOS: TUN runs through Best's helper service: 'ready', 'outdated' (install again) or 'missing'.
+let macTunHelper = 'missing';
+const macTun = () => require('./mac/tun');
+/** Can TUN be turned on? Windows: Best runs as administrator; macOS: the helper service answers. */
+function tunAvailable() { return IS_MAC ? macTunHelper === 'ready' : isAdmin; }
 let mainWin = null;
 let trayWin = null;
 let tray = null;
@@ -285,7 +290,7 @@ function publicServer(s) {
 
 function snapshot() {
   return {
-    settings, routing, activeId, isAdmin,
+    settings, routing, activeId, isAdmin, tunAvailable: tunAvailable(), tunHelper: IS_MAC ? macTunHelper : '',
     servers: servers.map(publicServer),
     subs,
     core: cores.state,
@@ -331,7 +336,7 @@ async function connect(id) {
     const p = customInboundPorts(server);
     if (p[0]) effective = { ...effective, socksPort: p[0] };
   }
-  if (settings.tun && !isAdmin) {
+  if (settings.tun && !tunAvailable()) {
     settings = { ...settings, tun: false };
     saveSettings();
     toast('warning', 'tunNeedsAdmin');
@@ -1099,8 +1104,52 @@ function scheduleSubUpdates() {
 
 // ------------------------------------------------------------------ admin / startup
 
+/**
+ * macOS: install (or bring up to date) the TUN helper service after macOS' password prompt. It
+ * keeps its own root-owned copy of the sing-box shipped in Best.app.
+ */
+async function installTunHelper() {
+  const t = trayI18n(settings.language);
+  try {
+    await macTun().installHelper(CoreManager.bundledSingBox(), t.tunHelperPrompt);
+    macTunHelper = 'ready';
+    cores.log('app', 'TUN helper installed');
+    toast('info', 'TUN_HELPER_INSTALLED');
+    return true;
+  } catch (e) {
+    if (e.message === 'TUN_HELPER_CANCELLED') toast('warning', 'TUN_HELPER_CANCELLED');
+    else { cores.log('app', `TUN helper: ${e.message}`); toast('error', 'TUN_HELPER_FAILED', e.message.replace(/^TUN_HELPER_FAILED:/, '')); }
+    macTunHelper = await macTun().helperStatus(CoreManager.bundledSingBox());
+    return false;
+  } finally { broadcast(); }
+}
+
+/** macOS: ask the helper again (it may have been installed or removed outside Best). */
+async function refreshTunHelper() {
+  if (!IS_MAC) return '';
+  const now = await macTun().helperStatus(CoreManager.bundledSingBox());
+  if (now !== macTunHelper) { macTunHelper = now; broadcast(); }
+  return now;
+}
+
+/** macOS: remove the TUN helper service (TUN is turned off first). */
+async function removeTunHelper() {
+  if (!IS_MAC) return false;
+  if (settings.tun) await ipcActions.setSettings({ tun: false });
+  try {
+    await macTun().removeHelper(trayI18n(settings.language).tunHelperRemovePrompt);
+  } catch (e) {
+    if (e.message !== 'TUN_HELPER_CANCELLED') toast('error', 'TUN_HELPER_FAILED', e.message.replace(/^TUN_HELPER_FAILED:/, ''));
+    return false;
+  }
+  macTunHelper = await macTun().helperStatus(CoreManager.bundledSingBox());
+  cores.log('app', 'TUN helper removed');
+  broadcast();
+  return true;
+}
+
 function checkAdmin() {
-  // macOS: Best never runs as root; TUN there will go through a separate helper service.
+  // macOS: Best never runs as root; TUN there goes through the helper service (installTunHelper).
   if (IS_MAC) return Promise.resolve(false);
   return new Promise((resolve) => {
     execFile(path.join(SYS32, 'net.exe'), ['session'], { windowsHide: true, timeout: 5000 }, (err) => resolve(!err));
@@ -1108,7 +1157,7 @@ function checkAdmin() {
 }
 
 async function relaunchAsAdmin() {
-  if (IS_MAC) { toast('warning', 'tunNeedsAdmin'); return false; } // no "run as administrator" on macOS
+  if (IS_MAC) return installTunHelper(); // macOS: no "run as administrator"; TUN gets its helper service instead
   const exePath = process.execPath;
   const args = app.isPackaged ? [] : [path.join(__dirname, '..')];
   const argList = args.map((a) => `'${a.replace(/['‘’‚‛]/g, "$&$&")}'`).join(',');
@@ -1145,7 +1194,7 @@ const HOTKEY_ACTIONS = {
   showWindow: async () => showMain(),
   proxyOn: async () => { if (!(settings.proxyMode === 'on' || settings.proxyMode === 'pac')) await toggleProxy(); },
   proxyOff: async () => { if (settings.proxyMode === 'on' || settings.proxyMode === 'pac') await toggleProxy(); },
-  toggleTun: async () => { if (isAdmin) await ipcActions.setSettings({ tun: !settings.tun }); else toast('warning', 'tunNeedsAdmin'); },
+  toggleTun: async () => { if (tunAvailable()) await ipcActions.setSettings({ tun: !settings.tun }); else toast('warning', 'tunNeedsAdmin'); },
   disconnect: () => disconnect(),
 };
 function applyGlobalHotkey() {
@@ -1310,6 +1359,8 @@ function createMainWindow(show) {
   // An update through the updater task that did not arrive: say so once (the old version is running).
   mainWin.webContents.once('did-finish-load', () => { const v = appUpd.failedTaskUpdate(); if (v) setTimeout(() => toast('error', 'UPDATE_TASK_FAILED', v), 1500); });
   mainWin.once('ready-to-show', () => { if (show) mainWin.show(); });
+  // macOS: coming back to the window, the TUN helper's state is read again (cheap: one local request)
+  if (IS_MAC) mainWin.on('focus', () => { refreshTunHelper().catch(() => {}); });
   mainWin.on('close', (e) => {
     if (!quitting && settings.closeToTray) { e.preventDefault(); mainWin.hide(); }
   });
@@ -1395,7 +1446,7 @@ function updateTray() {
     { type: 'separator' },
     { label: t.systemProxy, submenu: [modeItem('off', t.off), modeItem('on', t.on), modeItem('pac', 'PAC'), modeItem('keep', t.keep)] },
     { label: t.routing, submenu: routing.profiles.map(profileItem) },
-    { label: 'TUN', type: 'checkbox', checked: settings.tun, enabled: isAdmin, click: (item) => ipcActions.setSettings({ tun: item.checked }) },
+    { label: 'TUN', type: 'checkbox', checked: settings.tun, enabled: tunAvailable(), click: (item) => ipcActions.setSettings({ tun: item.checked }) },
     { label: t.servers, submenu: recent.length ? recent.map((x) => ({ label: (x.remark || x.address).slice(0, 60), type: 'radio', checked: x.id === activeId, click: () => connect(x.id).catch(reportConnectError) })) : [{ label: '—', enabled: false }] },
     { label: t.updateSubs, click: () => updateSubs().then(() => broadcast()).catch(() => {}) },
     { type: 'separator' },
@@ -1435,7 +1486,7 @@ const ipcActions = {
   async setSettings(patch) {
     const before = settings;
     settings = sanitizeSettings({ ...settings, ...patch });
-    if (settings.tun && !isAdmin) { settings.tun = false; toast('warning', 'tunNeedsAdmin'); }
+    if (settings.tun && !tunAvailable()) { settings.tun = false; toast('warning', 'tunNeedsAdmin'); }
     // LAN sharing never runs as an open proxy: without a user name / password, one is made up
     // (shown in Settings, can be changed there).
     if (settings.allowLan && (!settings.lanUser || !settings.lanPass)) {
@@ -1721,6 +1772,8 @@ function registerIpc() {
   handle('uwp:list', () => (IS_MAC ? [] : loopback.listApps()));
   handle('uwp:set', (add, remove) => (IS_MAC ? false : loopback.setExempt(add, remove)));
   handle('sys:relaunchAdmin', () => relaunchAsAdmin());
+  handle('sys:tunHelperRemove', () => removeTunHelper());
+  handle('sys:tunHelperCheck', () => refreshTunHelper());
   handle('sys:openDataFolder', () => shell.openPath(dataDir()));
   // Best's own GitHub page: a fixed address from package.json, nothing the page passes in.
   handle('sys:openProject', async () => {
@@ -1854,10 +1907,11 @@ app.whenReady().then(async () => {
   }
   await CoreManager.killOrphans();
   isAdmin = await checkAdmin();
+  if (IS_MAC) macTunHelper = await macTun().helperStatus(CoreManager.bundledSingBox());
   pruneLogFiles();
   setElevated(isAdmin);
   cleanupOldCores();
-  if (settings.tun && !isAdmin) { settings = { ...settings, tun: false }; saveSettings(); }
+  if (settings.tun && !tunAvailable()) { settings = { ...settings, tun: false }; saveSettings(); }
   if (settings.allowLan && (!settings.lanUser || !settings.lanPass)) { settings = { ...settings, lanUser: settings.lanUser || 'best', lanPass: settings.lanPass || crypto.randomBytes(9).toString('base64url') }; saveSettings(); }
   createUpdater();
   registerIpc();

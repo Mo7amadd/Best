@@ -212,7 +212,33 @@ function macAppBundle(execPath) {
   return m[1];
 }
 
+// ------------------------------------------------------------------ macOS TUN helper
+
+/**
+ * AppleScript that runs a program as root after macOS' own password prompt. Every argument goes
+ * through AppleScript's `quoted form of` (shell quoting) inside an escaped AppleScript text, so a
+ * path with spaces or quotes stays one argument and nothing in it is run as a command.
+ */
+function appleScriptAdmin(argv, prompt) {
+  // AppleScript text: \ and " escaped, line breaks as \n (a script passed to sh -c keeps its lines)
+  const text = (s) => `"${String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r/g, '').replace(/\n/g, '\\n')}"`;
+  if (!argv.length || argv.some((a) => /\0/.test(String(a)))) throw new Error('bad command');
+  const cmd = argv.map((a) => `quoted form of ${text(a)}`).join(' & " " & ');
+  return `do shell script ${cmd} with prompt ${text(prompt)} with administrator privileges`;
+}
+
+/**
+ * The TUN configuration as the macOS helper takes it: macOS names TUN interfaces utun0, utun1… by
+ * itself (sing-box picks a free one), so the Windows adapter name goes.
+ */
+function macTunConfig(config) {
+  const c = JSON.parse(JSON.stringify(config));
+  for (const ib of c.inbounds || []) if (ib.type === 'tun') delete ib.interface_name;
+  return c;
+}
+
 module.exports = {
+  appleScriptAdmin, macTunConfig,
   PLATFORM, IS_MAC, IS_WIN, archOf, exeName, coreAsset, coreFiles, appAssetName, devCoresFolder,
   macBypassList, parseNetworkServices, parseProxyState, parseAutoProxy, macProxySteps, isLoopback, isOwnPac,
   parsePs, launchAgentPlist, macAppBundle,

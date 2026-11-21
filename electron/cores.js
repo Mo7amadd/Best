@@ -21,7 +21,7 @@ const { applyBinding } = require('../src/core/bind');
 const { buildMihomoConfig, buildMihomoTestConfig } = require('../src/core/mihomo-config');
 const { GEOSITE } = require('../src/core/country');
 const { coreExe, geoDir, allCoreExes, runRoot } = require('./updater');
-const { exeName, parsePs, devCoresFolder } = require('./platform');
+const { exeName, parsePs, devCoresFolder, macTunConfig } = require('./platform');
 const { buildSingBoxConfig, buildTunConfig, buildSingBoxTestConfig, serverNames, useServerIps } = require('../src/core/singbox-config');
 
 /**
@@ -276,7 +276,12 @@ class CoreManager extends EventEmitter {
   async startTun(settings) {
     await this.stopTun();
     this.log('app', 'starting TUN (sing-box)');
-    const proc = new CoreProcess('sing-box', ['run', '-c', 'stdin', '-D', workDir('sing-box')], useServerIps(buildTunConfig(settings), this.serverIps), 'tun');
+    const config = useServerIps(buildTunConfig(settings), this.serverIps);
+    // macOS: Best's helper service runs TUN as root (mac/tun.js); Windows: sing-box as a child of Best,
+    // which runs as administrator.
+    const proc = process.platform === 'darwin'
+      ? new (require('./mac/tun').HelperTun)(macTunConfig(config))
+      : new CoreProcess('sing-box', ['run', '-c', 'stdin', '-D', workDir('sing-box')], config, 'tun');
     this.tun = proc;
     this.tunSig = tunSignature(settings);
     const recent = [];
@@ -291,8 +296,17 @@ class CoreManager extends EventEmitter {
         this.setState({ tun: false, error: 'TUN_EXITED' });
       }
     });
-    // sing-box needs a moment to create the adapter and routes.
-    await new Promise((r) => setTimeout(r, 1500));
+    if (proc.ready) {
+      // the macOS helper answers once its sing-box is up (or tells why it is not)
+      try { await Promise.race([proc.ready, new Promise((_, no) => setTimeout(() => no(new Error('the TUN helper did not answer')), 20000))]); } catch (e) {
+        this.tun = null;
+        await proc.stop();
+        throw new Error(`TUN_FAILED:${recent.slice(-2).join(' | ') || e.message}`);
+      }
+    } else {
+      // sing-box needs a moment to create the adapter and routes.
+      await new Promise((r) => setTimeout(r, 1500));
+    }
     if (failed) {
       this.tun = null;
       throw new Error(`TUN_FAILED:${recent.slice(-2).join(' | ')}`);
@@ -369,6 +383,9 @@ class CoreManager extends EventEmitter {
     return Promise.all([run(exe('xray'), ['version']), run(exe('sing-box'), ['version'])])
       .then(([x, s]) => ({ xray: (/Xray ([\d.]+)/.exec(x) || [])[1] || '', singbox: (/version ([\d.]+)/.exec(s) || [])[1] || '' }));
   }
+
+  /** The sing-box shipped with Best (macOS: the TUN helper keeps a root-owned copy of it). */
+  static bundledSingBox() { return bundledExe('sing-box'); }
 
   /** Kill cores left running by a previous crash (only our own executables, matched by full path). */
   static killOrphans() {

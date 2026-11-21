@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -204,7 +205,9 @@ if (page) {
     const services = () => sh('/usr/sbin/networksetup', ['-listallnetworkservices']).split('\n').slice(1).map((s) => s.trim()).filter((s) => s && !s.startsWith('*'));
     const webProxy = (svc) => sh('/usr/sbin/networksetup', ['-getwebproxy', svc]);
     const exitIp = (proxy) => {
-      const args = ['-sS', '--max-time', '20', ...(proxy ? ['-x', proxy] : []), 'https://www.cloudflare.com/cdn-cgi/trace'];
+      // Asked by address, not by name: by name the server may reach Cloudflare over IPv6 one time and
+      // IPv4 the next, and the same server would show two exit addresses.
+      const args = ['-sS', '--max-time', '20', ...(proxy ? ['-x', proxy] : []), 'https://1.1.1.1/cdn-cgi/trace'];
       return (/^ip=(.+)$/m.exec(sh('/usr/bin/curl', args)) || [])[1] || '';
     };
     await check(true, 'connect to the test server with the system proxy on', async () => {
@@ -224,10 +227,12 @@ if (page) {
       if (bad.length) throw new Error(`not set on: ${bad.join(', ')}`);
       return `${services().length} services`;
     });
+    let directIp = '';
+    let tunnelIp = '';
     await check(true, 'traffic leaves through the server (exit address differs from the direct one)', () => {
-      const direct = exitIp('');
-      const tunnel = exitIp(`http://127.0.0.1:${http}`);
-      if (!tunnel || tunnel === direct) throw new Error(`direct ${direct ? 'x.x.x.x' : '—'}, tunnel ${tunnel ? 'same' : '—'}`);
+      directIp = exitIp('');
+      tunnelIp = exitIp(`http://127.0.0.1:${http}`);
+      if (!tunnelIp || tunnelIp === directIp) throw new Error(`direct ${directIp ? 'x.x.x.x' : '—'}, tunnel ${tunnelIp ? 'same' : '—'}`);
       return 'exit address differs';
     });
     await check(true, 'system proxy off: networksetup is clean again', async () => {
@@ -236,14 +241,136 @@ if (page) {
       const left = services().filter((svc) => /Enabled: Yes/.test(webProxy(svc)) && /127\.0\.0\.1/.test(webProxy(svc)));
       if (left.length) throw new Error(`still set on: ${left.join(', ')}`);
     });
-    await check(true, '⌘Q with the proxy on: Best removes it before quitting', async () => {
+    // -------------------------------------------------------------- TUN through the helper service
+    lines.push('', '## TUN (helper service)');
+    const resDir = path.join(appDir, 'Contents', 'Resources');
+    const HOME = '/Library/PrivilegedHelperTools/com.best.client.tun';
+    const SOCK = '/var/run/com.best.client.tun.socket';
+    const helperAsk = (obj) => within(15000, 'the helper', new Promise((resolve, reject) => {
+      const s = net.createConnection(SOCK);
+      let b = '';
+      s.on('connect', () => s.write(`${JSON.stringify(obj)}\n`));
+      s.on('data', (d) => { b += d; const i = b.indexOf('\n'); if (i >= 0) { s.destroy(); try { resolve(JSON.parse(b.slice(0, i))); } catch (e) { reject(e); } } });
+      s.on('error', reject);
+    }));
+    const tunState = async () => (await ev('window.best.getState()')).core.tun;
+    let helperOk = false;
+    const fileSha = (f) => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
+    const helperFile = path.join(resDir, 'helper', 'best-tun-helper');
+    const singBoxFile = path.join(resDir, 'cores', 'sing-box', 'sing-box');
+    const installArgs = (helperSha) => ['-n', '/bin/sh', path.join(resDir, 'helper', 'install.sh'), helperFile, singBoxFile, String(process.getuid()), helperSha, fileSha(singBoxFile)];
+    await check(true, 'install refuses programs that are not the ones Best checked (changed while the password was asked)', () => {
+      const r = trySh('/usr/bin/sudo', installArgs('0'.repeat(64)), 60000);
+      if (r.ok || fs.existsSync(HOME)) throw new Error(`installed anyway: ${r.out}`);
+      return r.out.trim().split('\n').pop();
+    });
+    await check(true, 'install the helper (here with sudo; users get the macOS password prompt)', () => {
+      const r = trySh('/usr/bin/sudo', installArgs(fileSha(helperFile)), 60000);
+      if (!r.ok) throw new Error(r.out);
+    });
+    await check(true, 'the helper and its sing-box belong to root and no one else can change them', () => {
+      for (const f of [HOME, `${HOME}/best-tun-helper`, `${HOME}/sing-box`, `${HOME}/owner`, '/Library/LaunchDaemons/com.best.client.tun.plist']) {
+        const st = fs.statSync(f);
+        if (st.uid !== 0 || (st.mode & 0o022)) throw new Error(`${f}: owner ${st.uid}, mode ${(st.mode & 0o777).toString(8)}`);
+      }
+    });
+    await check(true, 'the helper answers its user', async () => {
+      for (let i = 0; i < 40 && !fs.existsSync(SOCK); i++) await wait(250);
+      const r = await helperAsk({ cmd: 'hello' });
+      if (!r.ok) throw new Error(JSON.stringify(r));
+      if (r.singbox !== fileSha(singBoxFile)) throw new Error('its sing-box is not the one shipped in Best.app');
+      helperOk = true;
+      return `version ${r.version}; its sing-box = the one in Best.app`;
+    });
+    await check(true, 'another user is refused', () => {
+      const r = trySh('/bin/sh', ['-c', 'printf \'{"cmd":"hello"}\\n\' | /usr/bin/sudo -n -u nobody /usr/bin/nc -U "$1"', 'sh', SOCK], 20000);
+      if (!/not allowed/.test(r.out)) throw new Error(`answer: ${r.out.slice(0, 200)}`);
+    });
+    // Configurations that could make root read or write files, or send traffic elsewhere: refused.
+    const base = { inbounds: [{ type: 'tun', tag: 'tun-in', address: ['172.19.0.1/30'], auto_route: true }], outbounds: [{ type: 'direct', tag: 'direct' }], route: { final: 'direct' } };
+    const bad = {
+      'log written to a file': { ...base, log: { output: '/tmp/best-owned' } },
+      'Clash API (serves files)': { ...base, experimental: { clash_api: { external_controller: '127.0.0.1:9090', external_ui: '/etc' } } },
+      'cache file': { ...base, experimental: { cache_file: { enabled: true, path: '/etc/x.db' } } },
+      'a proxy outbound to the internet': { ...base, outbounds: [{ type: 'vless', tag: 'p', server: '203.0.113.1', server_port: 443, uuid: '11111111-1111-4111-8111-111111111111' }] },
+      'a SOCKS proxy not on this computer': { ...base, outbounds: [{ type: 'socks', tag: 'p', server: '203.0.113.1', server_port: 1080 }] },
+      'a hosts file read as root': { ...base, dns: { servers: [{ type: 'hosts', tag: 'h', path: ['/etc/master.passwd'] }] } },
+      'a local rule set': { ...base, route: { final: 'direct', rule_set: [{ type: 'local', tag: 'r', path: '/etc/x.srs' }] } },
+      'two inbounds': { ...base, inbounds: [base.inbounds[0], { type: 'mixed', tag: 'm', listen: '0.0.0.0', listen_port: 1080 }] },
+      'a non-TUN inbound': { ...base, inbounds: [{ type: 'mixed', tag: 'm', listen: '0.0.0.0', listen_port: 1080 }] },
+      'a file path hidden in a rule': { ...base, route: { final: 'direct', rules: [{ domain: ['/etc/passwd'], outbound: 'direct' }] } },
+      'a log level that records every connection': { ...base, log: { level: 'debug' } },
+    };
+    if (helperOk) {
+      for (const [name, config] of Object.entries(bad)) {
+        await check(true, `refused: ${name}`, async () => {
+          const r = await helperAsk({ cmd: 'start', config });
+          if (!r.error || !/refused/.test(r.error)) throw new Error(`answer: ${JSON.stringify(r).slice(0, 200)}`);
+          return r.error.slice(0, 120);
+        });
+      }
+    }
+    await check(true, 'Best sees the helper (TUN can be turned on)', async () => {
+      const st = await ev('window.best.checkTunHelper()');
+      if (st !== 'ready') throw new Error(`helper state: ${st}`);
+      if (!(await ev('window.best.getState()')).tunAvailable) throw new Error('TUN still unavailable');
+    });
+    await check(true, 'TUN on: all traffic of the Mac goes through the server, without any proxy setting', async () => {
+      await ev(`window.best.setSettings({ tun: true })`);
+      for (let i = 0; i < 40 && !(await tunState()); i++) await wait(500);
+      if (!(await tunState())) throw new Error('TUN did not start');
+      await wait(2000);
+      const route = trySh('/sbin/route', ['-n', 'get', '1.1.1.1'], 15000).out;
+      const iface = (/interface: (\S+)/.exec(route) || [])[1] || '';
+      if (!/^utun\d+$/.test(iface)) throw new Error(`route to the internet: ${iface || 'unknown'}`);
+      let ip = '';
+      try { ip = exitIp(''); } catch { /* explained below */ }
+      if (!ip || ip !== tunnelIp) {
+        // Keep what tells DNS problems from routing ones: an address without a name, the DNS setup,
+        // the routes and Best's log (TUN and cores).
+        const byIp = trySh('/usr/bin/curl', ['-sS', '--max-time', '15', 'https://1.1.1.1/cdn-cgi/trace'], 30000);
+        const ipOnly = (/^ip=(.+)$/m.exec(byIp.out) || [])[1] || '';
+        const diag = [
+          `## by address only (no DNS): ${ipOnly ? (ipOnly === tunnelIp ? 'through the server' : ipOnly === directIp ? 'direct' : 'other') : `failed: ${byIp.out.slice(0, 300)}`}`,
+          '## curl -v by name', trySh('/usr/bin/curl', ['-sS', '-v', '--max-time', '15', 'https://www.cloudflare.com/cdn-cgi/trace'], 30000).out.split('\n').filter((l) => /^\*|curl:/.test(l)).slice(0, 25).join('\n'),
+          '## scutil --dns', trySh('/usr/sbin/scutil', ['--dns'], 15000).out.split('\n').slice(0, 40).join('\n'),
+          '## netstat -rn', trySh('/usr/sbin/netstat', ['-rn', '-f', 'inet'], 15000).out.split('\n').slice(0, 30).join('\n'),
+          '## Best log', ((await ev('window.best.getLogs()').catch(() => [])) || []).slice(-60).map((l) => `${l.time} ${l.source} ${l.level} ${l.text}`).join('\n'),
+        ].join('\n');
+        fs.writeFileSync(path.join(OUT, 'tun-diagnostics.txt'), diag);
+        throw new Error(`exit address without a proxy is ${ip === directIp ? 'the direct one' : 'unknown'}; by address only: ${ipOnly ? (ipOnly === tunnelIp ? 'through the server' : 'not through the server') : 'failed'} (tun-diagnostics.txt)`);
+      }
+      // and names work inside TUN too (its DNS goes through the tunnel)
+      const byName = trySh('/usr/bin/curl', ['-sS', '--max-time', '20', 'https://www.cloudflare.com/cdn-cgi/trace'], 30000);
+      if (!/^ip=/m.test(byName.out)) throw new Error(`a site by name does not open in TUN: ${byName.out.slice(0, 200)}`);
+      return `default route on ${iface}; exit address = the server's; names resolve through the tunnel`;
+    });
+    await check(true, 'TUN off: the Mac goes direct again', async () => {
+      await ev(`window.best.setSettings({ tun: false })`);
+      for (let i = 0; i < 30 && (await tunState()); i++) await wait(500);
+      await wait(1500);
+      const ip = exitIp('');
+      if (ip !== directIp) throw new Error('the exit address is not the direct one');
+    });
+    await check(true, '⌘Q with the proxy and TUN on: Best removes the proxy and the helper stops TUN', async () => {
       await ev(`window.best.setProxyMode('on')`);
+      await ev(`window.best.setSettings({ tun: true })`);
+      for (let i = 0; i < 40 && !(await tunState()); i++) await wait(500);
       await wait(1500);
       // The same quit as ⌘Q (app.quit → clean-up); osascript would need an Automation permission.
       await ev('window.best.quit()').catch(() => {});
       for (let i = 0; i < 40 && child.exitCode === null; i++) await wait(250);
+      await wait(2500);
       const left = services().filter((svc) => /Enabled: Yes/.test(webProxy(svc)) && /127\.0\.0\.1/.test(webProxy(svc)));
-      if (left.length) throw new Error(`still set on: ${left.join(', ')}`);
+      if (left.length) throw new Error(`proxy still set on: ${left.join(', ')}`);
+      const ip = exitIp('');
+      if (ip !== directIp) throw new Error('TUN still captures the traffic after Best quit');
+    });
+    await check(true, 'remove the helper: nothing of it is left', () => {
+      const r = trySh('/usr/bin/sudo', ['-n', '/bin/sh', path.join(resDir, 'helper', 'uninstall.sh')], 60000);
+      if (!r.ok) throw new Error(r.out);
+      const left = [HOME, SOCK, '/Library/LaunchDaemons/com.best.client.tun.plist'].filter((f) => fs.existsSync(f));
+      if (left.length) throw new Error(`left: ${left.join(', ')}`);
     });
   }
 }

@@ -14,3 +14,5 @@ android/app/src/main/assets/web/gen/
 android/app/src/main/jniLibs/
 # macOS cores: downloaded and hash-checked by scripts/fetch-mac-cores.js
 resources/cores-mac-*/
+# macOS TUN helper: compiled by scripts/build-mac-helper.js
+resources/helper-mac-*/

@@ -52,6 +52,7 @@ jobs:
           npm run fonts
           npm run icons
           node scripts/fetch-mac-cores.js "$ARCH"
+          node scripts/build-mac-helper.js "$ARCH"
       - name: Interface tests (development app, throw-away data, system proxy untouched)
         run: npm run test:ui
       - name: Build dmg and zip (free ad-hoc signature)

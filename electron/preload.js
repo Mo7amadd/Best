@@ -54,7 +54,9 @@ contextBridge.exposeInMainWorld('best', {
   removeSub: invoke('sub:remove'),
   updateSubs: invoke('sub:update'),
   openSubLink: invoke('sub:open'),
-  relaunchAdmin: invoke('sys:relaunchAdmin'),
+  relaunchAdmin: invoke('sys:relaunchAdmin'), // macOS: installs the TUN helper service instead
+  removeTunHelper: invoke('sys:tunHelperRemove'),
+  checkTunHelper: invoke('sys:tunHelperCheck'),
   openDataFolder: invoke('sys:openDataFolder'),
   openProject: invoke('sys:openProject'),
   copy: invoke('sys:copy'),
