@@ -10,6 +10,9 @@ require.cache[require.resolve('electron')] = {
   exports: { app: { getVersion: () => installed }, shell: {} },
 };
 const { compareVersions, newer, checkApp, REPO_OK } = require('../electron/appupdate');
+// The release file Best looks for on this system (Windows installer; macOS zip per processor).
+const { appAssetName } = require('../electron/platform');
+const fileFor = (v) => appAssetName(v);
 
 test('versions sort by semantic versioning, test versions before their release', () => {
   const order = ['1.0.2', '1.0.3-1', '1.0.3-alpha.1', '1.0.3-beta', '1.0.3-beta.1', '1.0.3-beta.2', '1.0.3-beta.10', '1.0.3-rc.1', '1.0.3', '1.0.10', '1.1.0', '2.0.0-beta.1', '2.0.0'];
@@ -22,7 +25,7 @@ test('versions sort by semantic versioning, test versions before their release',
   assert.ok(!newer('1.0.3-beta.1', '1.0.3'));
 });
 
-const asset = (v) => ({ name: `Best-Setup-v${v}.exe`, digest: 'sha256:' + 'a'.repeat(64), size: 100, browser_download_url: `https://example.invalid/${v}` });
+const asset = (v) => ({ name: fileFor(v), digest: 'sha256:' + 'a'.repeat(64), size: 100, browser_download_url: `https://example.invalid/${v}` });
 const rel = (v, extra = {}) => ({ tag_name: `v${v}`, draft: false, prerelease: v.includes('-'), assets: [asset(v)], ...extra });
 // The updater as checkApp sees it: tags from github.com (the feed never has drafts), no SHA256SUMS
 // file (releases before it), and the API for one release by its tag.
@@ -82,10 +85,11 @@ test('an official version installed: never offered an older one', { skip: !REPO_
 test('with a SHA256SUMS file in the release, no API request at all', { skip: !REPO_OK }, async () => {
   installed = '1.0.2';
   const hash = 'b'.repeat(64);
-  const f = fake(rel('1.0.3', { assets: [] }), [], { 'v1.0.3/Best-Setup-v1.0.3.exe': hash });
+  const f = fake(rel('1.0.3', { assets: [] }), [], { [`v1.0.3/${fileFor('1.0.3')}`]: hash });
   const r = await checkApp(f, false, false);
   assert.deepStrictEqual([r.latest, r.available, r.digest], ['1.0.3', true, hash]);
-  assert.match(r.asset.browser_download_url, /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/v1\.0\.3\/Best-Setup-v1\.0\.3\.exe$/);
+  assert.match(r.asset.browser_download_url, /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/v1\.0\.3\//);
+  assert.ok(r.asset.browser_download_url.endsWith(`/${fileFor('1.0.3')}`));
   assert.deepStrictEqual(f.api, [], 'the API was asked');
 });
 
@@ -111,6 +115,8 @@ test('a release without a checksum is not offered', { skip: !REPO_OK }, async ()
   installed = '1.0.2';
   const r = await checkApp(fake(rel('1.0.3', { assets: [{ ...asset('1.0.3'), digest: '' }] }), []), false, false);
   assert.strictEqual(r.available, false);
-  const none = await checkApp(fake(rel('1.0.3'), []), true, false); // portable zip missing
-  assert.strictEqual(none.available, false);
+  if (process.platform !== 'darwin') { // (macOS has no portable copy)
+    const none = await checkApp(fake(rel('1.0.3'), []), true, false); // portable zip missing
+    assert.strictEqual(none.available, false);
+  }
 });

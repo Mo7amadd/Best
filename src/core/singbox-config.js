@@ -296,7 +296,8 @@ function buildTunConfig(settings) {
  * Without the list (tests, other callers) the file names are used.
  */
 function coreProcessRule(paths) {
-  const list = (Array.isArray(paths) ? paths : []).filter((p) => typeof p === 'string' && /^[a-z]:\\/i.test(p) && p.length < 400);
+  // Full paths only: C:\… (Windows) or /… (macOS).
+  const list = (Array.isArray(paths) ? paths : []).filter((p) => typeof p === 'string' && (/^[a-z]:\\/i.test(p) || /^\/[^\0\n]+$/.test(p)) && p.length < 400);
   if (!list.length) return { process_name: ['xray.exe', 'sing-box.exe', 'mihomo.exe'], outbound: 'direct' };
   const esc = (s) => s.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&');
   return { process_path_regex: [`(?i)^(${list.map(esc).join('|')})$`], outbound: 'direct' };

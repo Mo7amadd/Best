@@ -11,6 +11,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
 const { app, shell } = require('electron');
+const { appAssetName } = require('./platform');
 
 const REPO = (() => { try { return String(require('../package.json').best.updateRepo || ''); } catch { return ''; } })();
 const REPO_OK = /^[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}$/.test(REPO);
@@ -42,8 +43,9 @@ function compareVersions(a, b) {
 }
 const newer = (a, b) => compareVersions(a, b) > 0;
 
+/** Windows: installer or portable zip; macOS: the zip of Best.app for this processor (platform.js). */
 function assetName(version, portable) {
-  return portable ? `Best-v${version}-portable.zip` : `Best-Setup-v${version}.exe`;
+  return appAssetName(version, { portable });
 }
 
 /**
@@ -103,6 +105,14 @@ async function applyApp(updater, info, portable, onProgress, signal = null) {
   // Checked again from disk right before it is used.
   const again = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
   if (again !== info.digest) throw new Error('CHECKSUM_MISMATCH');
+
+  if (process.platform === 'darwin') {
+    // macOS: Best.app replaces itself after quitting (mac/appupdate.js); 'manual' = Best keeps
+    // running and the new app waits in Downloads.
+    const markPending = () => { try { fs.writeFileSync(pendingFile(), JSON.stringify({ version: info.latest, at: Date.now() })); } catch { /* only for the message */ } };
+    const how = await require('./mac/appupdate').applyMacUpdate(file, dir, info, { markPending });
+    return how === 'restart' ? true : 'manual';
+  }
 
   if (!portable) {
     // 1) The updater task set up by the installer: no administrator prompt (see build/updater).

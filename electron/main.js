@@ -3,7 +3,7 @@
 
 const {
   app, BrowserWindow, ipcMain, protocol, net: enet, session, Menu, Tray, nativeImage, screen,
-  clipboard, dialog, shell, desktopCapturer, nativeTheme, globalShortcut,
+  clipboard, dialog, shell, desktopCapturer, nativeTheme, globalShortcut, systemPreferences,
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -13,11 +13,13 @@ const net = require('net');
 const { execFile, spawn } = require('child_process');
 const SYS32 = require('path').join(process.env.SystemRoot || 'C:\\Windows', 'System32');
 const SYS_PS = require('path').join(SYS32, 'WindowsPowerShell', 'v1.0', 'powershell.exe'); // full path: never a powershell.exe from the current folder
+const IS_MAC = process.platform === 'darwin';
+const macApp = IS_MAC ? require('./mac/app') : null;
 const { pathToFileURL } = require('url');
 const QRCode = require('qrcode');
 const jsQR = require('jsqr');
 
-const { readJson, writeJson, dataDir, canEncrypt } = require('./store');
+const { readJson, writeJson, dataDir, canEncrypt, allowKeychainReset } = require('./store');
 const { StatsPoller } = require('./stats');
 const loopback = require('./loopback');
 const appUpd = require('./appupdate');
@@ -67,7 +69,13 @@ if (!app.requestSingleInstanceLock()) {
 
 // ------------------------------------------------------------------ state
 // Plain settings can be read right away; encrypted files need the app to be ready (DPAPI).
-let settings = sanitizeSettings(readJson('settings.json', {}));
+let settings = sanitizeSettings(macFirstRunDefaults(readJson('settings.json', {})));
+
+/** macOS: the system-wide shortcut uses ⌘ (Command+Option+B), not Control, until the user picks one. */
+function macFirstRunDefaults(saved) {
+  if (!IS_MAC || !saved || typeof saved !== 'object' || saved.hotkeys !== undefined) return saved;
+  return { ...saved, hotkeys: { ...DEFAULT_SETTINGS.hotkeys, toggleProxy: 'Super+Alt+B' } };
+}
 // No routing file yet = first run (then "my country" is taken from Windows once; "Not set" chosen later stays).
 const firstRouting = readJson('routing.json', null) === null;
 let routing = sanitizeRouting(readJson('routing.json', DEFAULT_ROUTING));
@@ -86,10 +94,36 @@ function loadEncryptedState() {
   if (secrets && typeof secrets.lanPass === 'string') settings = sanitizeSettings({ ...settings, lanPass: secrets.lanPass, webdavPass: secrets.webdavPass || '' });
   else if (settings.lanPass) saveSettings(); // move a password from the old plain settings.json
 }
+/**
+ * loadEncryptedState, but on macOS a Keychain that does not give the key (the user pressed Deny,
+ * or it is locked) does not lose anything: the user may try again, start empty (the old files are
+ * set aside untouched) or quit. False when Best quits.
+ */
+function loadEncryptedStateAsking() {
+  for (;;) {
+    try { loadEncryptedState(); return true; } catch (e) {
+      if (e.code !== 'KEYCHAIN_LOCKED') throw e;
+      const t = trayI18n(settings.language);
+      const choice = dialog.showMessageBoxSync({
+        type: 'warning', title: 'Best', message: t.kcTitle, detail: t.kcDetail,
+        buttons: [t.kcRetry, t.kcEmpty, t.quit], defaultId: 0, cancelId: 2, noLink: true,
+      });
+      if (choice === 1) { allowKeychainReset(); continue; }
+      // Chromium remembers a refused Keychain for the life of the process: asking again needs a
+      // fresh start (macOS then shows its own prompt once more).
+      if (choice === 0) app.relaunch();
+      quitting = true;
+      app.exit(0);
+      return false;
+    }
+  }
+}
+
 let isAdmin = false;
 let mainWin = null;
 let trayWin = null;
 let tray = null;
+let trayMenu = null; // the tray's right-click menu (rebuilt by updateTray)
 let quitting = false;
 let testRun = null;
 let subTimer = null;
@@ -261,7 +295,8 @@ function snapshot() {
     portable: PORTABLE,
     exitInfo,
     // Cores run as administrator only from a folder normal programs cannot change (all-users install).
-    secureCores: !app.isPackaged || protectedInstall(),
+    // macOS: TUN never runs the cores from a user folder as root (it will use its helper's own copy).
+    secureCores: !app.isPackaged || IS_MAC || protectedInstall(),
     mihomo: mihomoInstalled(),
     version: app.getVersion(),
     defaults: DEFAULT_SETTINGS, // Settings marks what differs from these
@@ -406,7 +441,7 @@ function hostsMap() {
   let map = {};
   if (settings.useSystemHosts) {
     try {
-      const file = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'drivers', 'etc', 'hosts');
+      const file = IS_MAC ? '/etc/hosts' : path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'drivers', 'etc', 'hosts');
       map = parseHosts(fs.readFileSync(file, 'utf8').slice(0, 512 * 1024), { skipLocal: true });
     } catch { /* unreadable: ignore */ }
   }
@@ -525,7 +560,11 @@ async function safeApplyProxy(mode) {
   try {
     await applySystemProxy(mode, settings);
     setProxyApplied(mode === 'on' || mode === 'pac');
-  } catch (e) { cores.log('app', `system proxy error: ${e.message}`); toast('error', 'proxyError', e.message); }
+  } catch (e) {
+    cores.log('app', `system proxy error: ${e.message}`);
+    if (e.message === 'MAC_PROXY_ADMIN') toast('error', 'MAC_PROXY_ADMIN'); // macOS standard account
+    else toast('error', 'proxyError', e.message);
+  }
 }
 
 async function applyProxyMode() {
@@ -668,6 +707,17 @@ async function importText(text, subId = '') {
 }
 
 async function scanScreenQr() {
+  // macOS: screen pictures need "Screen Recording". Its status reads "denied" until it is given, also
+  // before macOS ever asked; the first scan goes ahead so that macOS asks (and lists Best in
+  // System Settings). After that, a missing permission opens the right System Settings page.
+  if (IS_MAC && systemPreferences.getMediaAccessStatus('screen') !== 'granted') {
+    const asked = path.join(app.getPath('userData'), 'screen-permission-asked');
+    if (fs.existsSync(asked)) {
+      shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture').catch(() => {});
+      return { added: 0, dup: 0, errors: 0, notFound: true, needPermission: true };
+    }
+    try { fs.writeFileSync(asked, ''); } catch { /* asked again next time */ }
+  }
   const displays = screen.getAllDisplays();
   const maxW = Math.max(...displays.map((d) => Math.round(d.size.width * d.scaleFactor)));
   const maxH = Math.max(...displays.map((d) => Math.round(d.size.height * d.scaleFactor)));
@@ -849,7 +899,11 @@ async function fetchTextNow(url, { userAgent, viaProxy }) {
     res = await ses.fetch(url, {
       headers: {
         'User-Agent': userAgent || settings.subUserAgent || BEST_UA, Accept: '*/*',
-        ...hwid.hwidHeaders({ enabled: settings.subHwid, secret: settings.subHwid ? getDeviceSecret() : '', url, osVersion: os.release(), model: settings.subHwidName }),
+        ...hwid.hwidHeaders({
+          enabled: settings.subHwid, secret: settings.subHwid ? getDeviceSecret() : '', url, model: settings.subHwidName,
+          // macOS: its own version (os.release() is the Darwin kernel's), "macOS" / "Mac" for the panel.
+          ...(IS_MAC ? { os: 'macOS', osVersion: process.getSystemVersion(), defaultModel: 'Mac' } : { osVersion: os.release() }),
+        }),
       },
       redirect: 'follow', credentials: 'omit', cache: 'no-store', signal: AbortSignal.timeout(25000),
     });
@@ -1046,12 +1100,15 @@ function scheduleSubUpdates() {
 // ------------------------------------------------------------------ admin / startup
 
 function checkAdmin() {
+  // macOS: Best never runs as root; TUN there will go through a separate helper service.
+  if (IS_MAC) return Promise.resolve(false);
   return new Promise((resolve) => {
     execFile(path.join(SYS32, 'net.exe'), ['session'], { windowsHide: true, timeout: 5000 }, (err) => resolve(!err));
   });
 }
 
 async function relaunchAsAdmin() {
+  if (IS_MAC) { toast('warning', 'tunNeedsAdmin'); return false; } // no "run as administrator" on macOS
   const exePath = process.execPath;
   const args = app.isPackaged ? [] : [path.join(__dirname, '..')];
   const argList = args.map((a) => `'${a.replace(/['‘’‚‛]/g, "$&$&")}'`).join(',');
@@ -1162,7 +1219,15 @@ async function installAppUpdate() {
   appUpdateAbort = new AbortController();
   const signal = appUpdateAbort.signal;
   try {
-    await appUpd.applyApp(updater, appUpdateInfo, PORTABLE, (p) => { appUpdate.progress = Math.round(p * 100); sendProgress('app', appUpdate.progress); }, signal);
+    const how = await appUpd.applyApp(updater, appUpdateInfo, PORTABLE, (p) => { appUpdate.progress = Math.round(p * 100); sendProgress('app', appUpdate.progress); }, signal);
+    if (how === 'manual') {
+      // macOS, Best cannot replace itself where it runs: the checked new app waits in Downloads.
+      cores.log('app', `Best ${appUpdateInfo.latest} verified and put in Downloads (this copy cannot replace itself here)`);
+      appUpdate = { ...appUpdate, busy: false, progress: 0, error: '' };
+      broadcast();
+      toast('info', 'UPDATE_MAC_MANUAL', appUpdateInfo.latest);
+      return false;
+    }
     cores.log('app', `update to Best ${appUpdateInfo.latest} verified; restarting into the new version`);
     quitting = true;
     setTimeout(() => app.quit(), 300);
@@ -1182,6 +1247,12 @@ async function installAppUpdate() {
 
 function applyLoginItem() {
   if (!app.isPackaged) return;
+  if (IS_MAC) {
+    let ok = false;
+    try { ok = macApp.setOpenAtLogin(settings.autoStart); } catch (e) { cores.log('app', `login item: ${e.message}`); }
+    if (!ok && settings.autoStart) toast('warning', 'MAC_MOVE_TO_APPS');
+    return;
+  }
   app.setLoginItemSettings({ openAtLogin: settings.autoStart, args: ['--hidden'] });
 }
 
@@ -1227,7 +1298,11 @@ function createMainWindow(show) {
   mainWin = new BrowserWindow({
     width: 1320, height: 880, minWidth: 940, minHeight: 620, show: false,
     title: 'Best', backgroundColor: themeBg(), icon: path.join(ICONS, 'app.png'),
-    titleBarStyle: 'hidden', titleBarOverlay: overlayColors(),
+    // Windows draws its buttons over the page's top 40 px (titleBarOverlay); macOS shows its three
+    // window buttons at the top left, placed in the middle of the same 40 px.
+    ...(IS_MAC
+      ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 16, y: 13 } }
+      : { titleBarStyle: 'hidden', titleBarOverlay: overlayColors() }),
     webPreferences: webPrefs(),
   });
   mainWin.loadURL(`${APP_ORIGIN}/index.html`);
@@ -1253,13 +1328,17 @@ function createTrayWindow() {
     webPreferences: webPrefs(),
   });
   trayWin.loadURL(`${APP_ORIGIN}/tray.html`);
-  trayWin.on('blur', () => { if (trayWin && !trayWin.webContents.isDevToolsOpened()) trayWin.hide(); });
+  trayWin.on('blur', () => { if (trayWin && !trayWin.webContents.isDevToolsOpened()) { trayWin.hide(); trayHiddenAt = Date.now(); } });
   trayWin.on('closed', () => { trayWin = null; });
 }
 
+let trayHiddenAt = 0;
 function toggleTrayWindow() {
   if (!trayWin) createTrayWindow();
   if (trayWin.isVisible()) { trayWin.hide(); return; }
+  // macOS: a click on the menu bar icon first takes the focus from the open small window (which
+  // then hides itself); that click is meant to close it, not to open it again.
+  if (IS_MAC && Date.now() - trayHiddenAt < 300) return;
   const tb = tray.getBounds();
   const disp = screen.getDisplayNearestPoint({ x: tb.x, y: tb.y });
   const wa = disp.workArea;
@@ -1274,8 +1353,10 @@ function toggleTrayWindow() {
 }
 
 function trayImage() {
-  const file = path.join(ICONS, isEngaged() ? (cores.state.tun ? 'tray-tun.png' : 'tray-on.png') : 'tray-off.png');
+  const state = isEngaged() ? (cores.state.tun ? 'tun' : 'on') : 'off';
+  const file = IS_MAC ? macApp.trayIconFile(ICONS, state) : path.join(ICONS, `tray-${state}.png`);
   const img = nativeImage.createFromPath(file);
+  if (IS_MAC && !img.isEmpty()) img.setTemplateImage(true);
   return img.isEmpty() ? nativeImage.createEmpty() : img;
 }
 
@@ -1294,8 +1375,8 @@ function updateTray() {
   tray.setImage(trayImage());
   const s = activeServer();
   updateTrayTooltip();
-  // Status badge on the Best button in the taskbar.
-  if (mainWin && !mainWin.isDestroyed()) {
+  // Status badge on the Best button in the taskbar (Windows only; macOS shows it in the menu bar icon).
+  if (!IS_MAC && mainWin && !mainWin.isDestroyed()) {
     try {
       if (isEngaged()) {
         const badge = nativeImage.createFromPath(path.join(ICONS, cores.state.tun ? 'overlay-tun.png' : 'overlay-on.png'));
@@ -1308,7 +1389,7 @@ function updateTray() {
   const modeItem = (mode, label) => ({ label, type: 'radio', checked: settings.proxyMode === mode, click: () => ipcActions.setProxyMode(mode) });
   const profileItem = (p) => ({ label: p.builtin ? ({ 'p-local': t.bypassLocal, 'p-global': t.global, 'p-direct': t.direct }[p.id] || p.name) : p.name, type: 'radio', checked: routing.activeId === p.id, click: () => ipcActions.setRouting({ activeId: p.id }) });
   const recent = servers.filter((x) => x.subId === (s ? s.subId : '') || !s).slice(0, 25);
-  tray.setContextMenu(Menu.buildFromTemplate([
+  trayMenu = Menu.buildFromTemplate([
     { label: isEngaged() ? t.proxyOff : t.proxyOn, click: () => toggleProxy().catch(reportConnectError) },
     { label: t.disconnect, enabled: cores.state.running || cores.state.tun, click: () => disconnect().catch(reportConnectError) },
     { type: 'separator' },
@@ -1320,13 +1401,17 @@ function updateTray() {
     { type: 'separator' },
     { label: t.open, click: showMain },
     { label: t.quit, click: () => { quitting = true; app.quit(); } },
-  ]));
+  ]);
+  // macOS: a menu set on the icon would open on every click (no small window); there it opens on a
+  // right-click only, like the Windows tray.
+  if (!IS_MAC) tray.setContextMenu(trayMenu);
 }
 
 function createTray() {
   tray = new Tray(trayImage());
   tray.on('click', toggleTrayWindow);
   tray.on('double-click', showMain);
+  if (IS_MAC) tray.on('right-click', () => { if (trayMenu) tray.popUpContextMenu(trayMenu); });
   updateTray();
 }
 
@@ -1363,7 +1448,7 @@ const ipcActions = {
     if (before.autoCheckUpdates !== settings.autoCheckUpdates) scheduleUpdateChecks();
     if (before.betaUpdates !== settings.betaUpdates) checkAppUpdate(); // the other channel may have something else
     if (before.theme !== settings.theme && mainWin) {
-      try { mainWin.setTitleBarOverlay(overlayColors()); mainWin.setBackgroundColor(themeBg()); } catch { /* ignore */ }
+      try { if (!IS_MAC) mainWin.setTitleBarOverlay(overlayColors()); mainWin.setBackgroundColor(themeBg()); } catch { /* ignore */ }
     }
     if (before.subAutoUpdateHours !== settings.subAutoUpdateHours) scheduleSubUpdates();
     if (before.uiZoom !== settings.uiZoom && mainWin && !mainWin.isDestroyed()) mainWin.webContents.setZoomFactor(settings.uiZoom);
@@ -1632,8 +1717,9 @@ function registerIpc() {
     });
     return true;
   });
-  handle('uwp:list', () => loopback.listApps());
-  handle('uwp:set', (add, remove) => loopback.setExempt(add, remove));
+  // Microsoft Store apps exist on Windows only (the page hides this section on macOS).
+  handle('uwp:list', () => (IS_MAC ? [] : loopback.listApps()));
+  handle('uwp:set', (add, remove) => (IS_MAC ? false : loopback.setExempt(add, remove)));
   handle('sys:relaunchAdmin', () => relaunchAsAdmin());
   handle('sys:openDataFolder', () => shell.openPath(dataDir()));
   // Best's own GitHub page: a fixed address from package.json, nothing the page passes in.
@@ -1726,6 +1812,10 @@ function hardenContents(contents) {
 app.on('web-contents-created', (_e, contents) => hardenContents(contents));
 
 app.on('second-instance', () => showMain());
+// macOS: a click on Best in the Dock (or opening it again from Applications) brings the window back.
+// macOS also sends this right after start; then it is ignored, so a hidden start stays hidden.
+let activateFrom = Infinity;
+app.on('activate', () => { if (Date.now() >= activateFrom) showMain(); });
 
 app.on('before-quit', (e) => {
   quitting = true;
@@ -1739,7 +1829,8 @@ app.on('window-all-closed', () => { /* keep running in the tray */ });
 app.on('will-quit', () => globalShortcut.unregisterAll());
 
 app.whenReady().then(async () => {
-  Menu.setApplicationMenu(null);
+  if (IS_MAC) macApp.setAppMenu(); // Best, Edit (⌘C / ⌘V in text fields) and Window menus
+  else Menu.setApplicationMenu(null);
   app.setAppUserModelId('com.best.client');
 
   const ses = session.defaultSession;
@@ -1755,7 +1846,7 @@ app.whenReady().then(async () => {
     return enet.fetch(pathToFileURL(file).toString());
   });
 
-  loadEncryptedState();
+  if (!loadEncryptedStateAsking()) return;
   if (firstRouting && !routing.country) {
     // First run: "my country" = the country Windows is set to.
     const cc = String(app.getLocaleCountryCode() || '').toLowerCase();
@@ -1773,6 +1864,7 @@ app.whenReady().then(async () => {
   createTray();
   const hidden = process.argv.includes('--hidden') || settings.startMinimized;
   createMainWindow(!hidden);
+  activateFrom = Date.now() + 1500;
   applyLoginItem();
   scheduleSubUpdates();
   applyGlobalHotkey();
@@ -1781,7 +1873,7 @@ app.whenReady().then(async () => {
     // Windows switched between light and dark: the minimize / maximize / close buttons that Windows
     // draws over the page follow too (they only changed with Best's own theme switch before).
     if (mainWin && !mainWin.isDestroyed()) {
-      try { mainWin.setTitleBarOverlay(overlayColors()); mainWin.setBackgroundColor(themeBg()); } catch { /* ignore */ }
+      try { if (!IS_MAC) mainWin.setTitleBarOverlay(overlayColors()); mainWin.setBackgroundColor(themeBg()); } catch { /* ignore */ }
     }
     broadcast();
   });

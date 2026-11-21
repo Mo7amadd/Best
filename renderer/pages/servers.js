@@ -1,7 +1,7 @@
 // Servers page: connection card, server table, collapsible log strip.
 
 import { h, icon, button, segmented, toggle, select, showMenu, toast, confirmDialog, modal, ltr, mount } from '../dom.js';
-import { t, num } from '../i18n.js';
+import { t, num, IS_MAC } from '../i18n.js';
 import {
   S, ui, api, render, run, newTesting, flagOf, serverName, delayTier, maskAddress, groupsList, serversInGroup, formatBytes, formatRate, countryName, localSet, go,
 } from '../app.js';
@@ -49,6 +49,7 @@ function connectionCard() {
     h('button', {
       type: 'button', class: 'tun-btn', role: 'switch', 'aria-checked': String(st.tun), 'aria-labelledby': 'tun-label',
       disabled: !S.isAdmin,
+      title: !S.isAdmin && IS_MAC ? t('tunNeedsAdmin') : undefined, // why it is off on macOS
       onClick: () => run(() => api.setSettings({ tun: !st.tun })),
     }, h('span', { class: 'switch', 'aria-hidden': 'true', 'aria-checked': String(st.tun) }, h('span', { class: 'switch-knob' })), st.tun ? t('on') : t('off')));
 
@@ -80,7 +81,8 @@ function connectionCard() {
       // means, and the way to TUN.
       h('div', { class: 'conn-notes' },
         h('span', { class: 'help' }, help),
-        !S.isAdmin ? h('button', { type: 'button', class: 'link-btn', onClick: () => api.relaunchAdmin() }, t('runAsAdmin')) : null)));
+        // macOS has no "run as administrator" (TUN there will use a helper service).
+        !S.isAdmin && !IS_MAC ? h('button', { type: 'button', class: 'link-btn', onClick: () => api.relaunchAdmin() }, t('runAsAdmin')) : null)));
 }
 
 /** "Exit IP 🇩🇪 1.2.3.4": the address websites see (checked through the tunnel after connecting). */
@@ -375,7 +377,7 @@ function clickRow(e, s, list) {
     const b = list.findIndex((x) => x.id === s.id);
     if (a >= 0 && b >= 0) {
       const [from, to] = a < b ? [a, b] : [b, a];
-      if (!e.ctrlKey) ui.selected = new Set();
+      if (!e.ctrlKey && !(IS_MAC && e.metaKey)) ui.selected = new Set();
       for (let i = from; i <= to; i++) ui.selected.add(list[i].id);
     }
   } else if (e.ctrlKey || e.metaKey) {
@@ -478,6 +480,7 @@ async function useFastest() {
 async function importResult(promise) {
   const r = await run(() => promise);
   if (!r) return;
+  if (r.needPermission) { toast(t('t_screenPermission'), 'warning'); return; }
   if (r.notFound) { toast(t('t_noQr'), 'warning'); return; }
   if (r.subs) {
     for (const s of r.subs) {
@@ -590,7 +593,7 @@ function tableKeys(e, list) {
     revealRow(next, list);
   } else if (e.key === 'Enter' && cur) {
     useServer(cur);
-  } else if (e.key === 'Delete') {
+  } else if (e.key === 'Delete' || (IS_MAC && e.key === 'Backspace' && e.metaKey)) { // macOS: ⌘⌫, as in Finder
     deleteSelected();
   } else if ((e.ctrlKey || e.metaKey) && e.code === 'KeyA') {
     e.preventDefault(); ui.selected = new Set(ids); render();
@@ -634,7 +637,7 @@ function serversCard() {
         })),
       button(t('add'), { icon: 'plus', onClick: (e) => addMenu(e.currentTarget) }),
       h('div', { class: 'split' },
-        h('button', { type: 'button', class: 'btn split-main', disabled: testing, title: 'Ctrl+R', onClick: () => serverActions.test('real') }, icon('bolt', 16), h('span', null, t('test_real'))),
+        h('button', { type: 'button', class: 'btn split-main', disabled: testing, title: IS_MAC ? '⌘R' : 'Ctrl+R', onClick: () => serverActions.test('real') }, icon('bolt', 16), h('span', null, t('test_real'))),
         h('button', { type: 'button', class: 'btn split-more', 'aria-label': t('test_more'), title: t('test_more'), onClick: (e) => testMenu(e.currentTarget) }, icon('chevron', 16, 2.2))),
       h('button', { type: 'button', class: 'btn', 'data-keep': 'update-btn', disabled: !S.subs.length, onClick: updateGroup }, icon('refresh', 16), h('span', null, t('update'))),
       button(t('useFastest'), { variant: 'primary', icon: 'bolt', onClick: useFastest, disabled: testing })));

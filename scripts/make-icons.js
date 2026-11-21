@@ -59,19 +59,19 @@ function roundedRectDist(px, py, x0, y0, x1, y1, r) {
   return Math.hypot(px - cx, py - cy) - r; // <0 inside
 }
 
-function draw(size, { fg, bg = '#151A21', border = '#2A313B', plain = false, dot = null, alpha = 1, onlyDot = false }) {
+function draw(size, { fg, bg = '#151A21', border = '#2A313B', plain = false, dot = null, alpha = 1, onlyDot = false, pad = 0 }) {
   const D = dot ? hex(dot) : null; const RING = hex('#0B0E12');
   const S = 4; // supersampling
   const out = Buffer.alloc(size * size * 4);
   const F = hex(fg); const B = hex(bg); const BR = hex(border);
-  const u = size / 32;
+  const u = (size - 2 * pad) / 32; // pad: empty margin around the tile (macOS app icon)
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       let r = 0; let g = 0; let b = 0; let a = 0;
       for (let sy = 0; sy < S; sy++) {
         for (let sx = 0; sx < S; sx++) {
-          const px = (x + (sx + 0.5) / S) / u;
-          const py = (y + (sy + 0.5) / S) / u;
+          const px = (x - pad + (sx + 0.5) / S) / u;
+          const py = (y - pad + (sy + 0.5) / S) / u;
           let col = null; let al = 0;
           if (!plain && !onlyDot) {
             const d = roundedRectDist(px, py, 1, 1, 31, 31, 9);
@@ -132,6 +132,43 @@ for (const [name, opt] of Object.entries(TRAY)) {
 // Taskbar overlay badges (shown on the Best button in the taskbar).
 fs.writeFileSync(path.join(OUT_ICONS, 'overlay-on.png'), draw(32, { fg: GREEN, dot: GREEN, onlyDot: true }));
 fs.writeFileSync(path.join(OUT_ICONS, 'overlay-tun.png'), draw(32, { fg: GREEN, dot: '#5AA9FF', onlyDot: true }));
+// macOS menu bar: black "template" images (macOS colours them for a light or dark menu bar).
+// Off: an outline; on: a filled tile with the "b" cut out; TUN: the same with a dot in the corner.
+function drawTemplate(size, kind) {
+  const S = 4;
+  const out = Buffer.alloc(size * size * 4);
+  const u = size / 32;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      let a = 0;
+      for (let sy = 0; sy < S; sy++) {
+        for (let sx = 0; sx < S; sx++) {
+          const px = (x + (sx + 0.5) / S) / u;
+          const py = (y + (sy + 0.5) / S) / u;
+          const box = roundedRectDist(px, py, 2, 2, 30, 30, 8);
+          const glyph = Math.min(distToSeg(px, py, 11.2, 7.5, 11.2, 24.5), Math.abs(Math.hypot(px - 17, py - 18.5) - 5.8)) < 1.7;
+          let on = false;
+          if (kind === 'off') on = (box < 0 && box > -2.2) || glyph;
+          else on = box < 0 && !glyph;
+          if (kind === 'tun') {
+            const d = Math.hypot(px - 26.5, py - 26.5);
+            if (d < 5.8) on = d < 3.9; // a cut-out ring around a solid dot, clear of the "b"
+          }
+          if (on) a += 1;
+        }
+      }
+      out[(y * size + x) * 4 + 3] = Math.round((a / (S * S)) * 255 * (kind === 'off' ? 0.6 : 1));
+    }
+  }
+  return png(size, out);
+}
+for (const kind of ['off', 'on', 'tun']) {
+  fs.writeFileSync(path.join(OUT_ICONS, `mac-${kind}Template.png`), drawTemplate(18, kind));
+  fs.writeFileSync(path.join(OUT_ICONS, `mac-${kind}Template@2x.png`), drawTemplate(36, kind));
+}
+// macOS app icon: the tile inside Apple's usual margin (824 of 1024 px).
+fs.writeFileSync(path.join(OUT_BUILD, 'icon-mac.png'), draw(1024, { fg: GREEN, pad: 100 }));
+
 fs.writeFileSync(path.join(OUT_BUILD, 'icon.png'), draw(512, { fg: GREEN }));
 fs.writeFileSync(path.join(OUT_BUILD, 'icon.ico'), ico([16, 24, 32, 48, 64, 128, 256].map((size) => ({ size, data: draw(size, { fg: GREEN }) }))));
 fs.writeFileSync(path.join(ROOT, 'renderer', 'logo.png'), draw(64, { fg: GREEN }));

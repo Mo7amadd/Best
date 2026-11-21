@@ -7,6 +7,7 @@ const invoke = (ch) => (...args) => ipcRenderer.invoke(ch, ...args);
 const EVENTS = ['state', 'log', 'toast', 'test', 'test-result', 'test-start', 'test-progress', 'stats', 'connections', 'progress'];
 
 contextBridge.exposeInMainWorld('best', {
+  platform: process.platform === 'darwin' ? 'mac' : 'win', // a few texts, keys and sections differ
   getState: invoke('state:get'),
   getLogs: invoke('logs:get'),
   clearLogs: invoke('logs:clear'),

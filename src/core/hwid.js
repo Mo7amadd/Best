@@ -30,13 +30,17 @@ function hwidFor(secret, url) {
 /** A header value: printable ASCII only, short (a name typed by the user, the OS version). */
 const headerText = (v, max) => String(v || '').replace(/[^\x20-\x7e]/g, '').replace(/\s+/g, ' ').trim().slice(0, max);
 
-/** Request headers for a subscription fetch ({} when the user turned it off or there is no secret). */
-function hwidHeaders({ enabled = true, secret, url, osVersion = '', model = '' }) {
+/**
+ * Request headers for a subscription fetch ({} when the user turned it off or there is no secret).
+ * `os` / `defaultModel`: the system's name and the device name used when the user chose none
+ * (Windows: "Windows" / "Windows PC"; macOS: "macOS" / "Mac").
+ */
+function hwidHeaders({ enabled = true, secret, url, osVersion = '', model = '', os = 'Windows', defaultModel = DEFAULT_MODEL }) {
   if (!enabled || !validSecret(secret)) return {};
-  const h = { 'x-hwid': hwidFor(secret, url), 'x-device-os': 'Windows' };
+  const h = { 'x-hwid': hwidFor(secret, url), 'x-device-os': headerText(os, 20) || 'Windows' };
   const ver = headerText(osVersion, 32);
   if (ver) h['x-ver-os'] = ver;
-  h['x-device-model'] = headerText(model, 40) || DEFAULT_MODEL;
+  h['x-device-model'] = headerText(model, 40) || headerText(defaultModel, 40) || DEFAULT_MODEL;
   return h;
 }
 

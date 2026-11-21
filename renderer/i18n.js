@@ -1,4 +1,7 @@
 // UI strings: Persian, English and Russian (selectable in Settings; English on first run).
+// Texts that differ on macOS are in i18n-mac.js.
+
+import { MAC } from './i18n-mac.js';
 
 const fa = {
   appName: 'Best',
@@ -1146,6 +1149,10 @@ const zh = {
 const DICTS = { fa, en, ru, zh };
 let current = 'en';
 
+/** Running on macOS? (Set by the preload script; a few texts and keys differ there.) */
+export const IS_MAC = typeof window !== 'undefined' && Boolean(window.best) && window.best.platform === 'mac';
+const PLATFORM_DICTS = IS_MAC ? MAC : null;
+
 export function setLanguage(lang) {
   current = DICTS[lang] ? lang : 'fa';
   document.documentElement.lang = current;
@@ -1158,7 +1165,7 @@ export function lang() { return current; }
 export function locale() { return current === 'fa' ? 'fa-IR' : current === 'ru' ? 'ru-RU' : current === 'zh' ? 'zh-CN' : 'en-GB'; }
 
 export function t(key, vars) {
-  let s = DICTS[current][key] ?? DICTS.en[key] ?? key;
+  let s = (PLATFORM_DICTS && PLATFORM_DICTS[current][key]) ?? DICTS[current][key] ?? (PLATFORM_DICTS && PLATFORM_DICTS.en[key]) ?? DICTS.en[key] ?? key;
   if (vars) for (const [k, v] of Object.entries(vars)) s = s.split(`{${k}}`).join(String(v));
   return s;
 }

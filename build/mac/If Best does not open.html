@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+<title>If Best does not open</title>
+<style>
+  :root { color-scheme: light dark; --bg: #F5F6F8; --card: #FFFFFF; --text: #161A21; --muted: #4E5664; --line: #DCE0E7; --code: #EEF0F4; --accent: #14915A; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0E1116; --card: #151A21; --text: #E6E9EE; --muted: #A7B0BC; --line: #232A33; --code: #1B212A; --accent: #3DD68C; } }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 20px 48px; display: grid; gap: 18px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 0 0 10px; }
+  ol { margin: 0; padding-inline-start: 22px; display: grid; gap: 6px; }
+  p { margin: 10px 0 0; color: var(--muted); }
+  code { display: block; margin-top: 8px; padding: 10px 12px; border-radius: 8px; background: var(--code); font: 13px ui-monospace, Menlo, monospace; direction: ltr; text-align: left; overflow-x: auto; }
+  b { color: var(--accent); }
+  [dir="rtl"] { font-family: "Geeza Pro", "Vazirmatn", -apple-system, sans-serif; }
+</style>
+</head>
+<body>
+<main>
+  <section>
+    <h1>If Best does not open</h1>
+    <ol>
+      <li>Drag <b>Best</b> to <b>Applications</b> and open it from there.</li>
+      <li>macOS says it cannot check Best for malicious software (Best has no paid Apple signature). Press <b>Done</b>, not Move to Trash.</li>
+      <li>Open <b>System Settings › Privacy &amp; Security</b>. Near the bottom it says Best was blocked: press <b>Open Anyway</b> and enter your Mac password.</li>
+      <li>Open Best again and press <b>Open</b>. From then on it opens normally; updates from inside Best do not need this again.</li>
+    </ol>
+    <p>Or, in Terminal:</p>
+    <code>xattr -dr com.apple.quarantine /Applications/Best.app</code>
+  </section>
+  <section lang="ru">
+    <h2>Если Best не открывается</h2>
+    <ol>
+      <li>Перетащите <b>Best</b> в <b>Applications</b> и откройте его оттуда.</li>
+      <li>macOS сообщит, что не может проверить Best на вредоносное ПО (у Best нет платной подписи Apple). Нажмите <b>Готово</b>, а не «Переместить в Корзину».</li>
+      <li>Откройте <b>Системные настройки › Конфиденциальность и безопасность</b>. Внизу будет сказано, что Best заблокирован: нажмите <b>Всё равно открыть</b> и введите пароль Mac.</li>
+      <li>Откройте Best ещё раз и нажмите <b>Открыть</b>. Дальше он открывается как обычно; обновления изнутри Best этого больше не требуют.</li>
+    </ol>
+    <p>Или в Терминале:</p>
+    <code>xattr -dr com.apple.quarantine /Applications/Best.app</code>
+  </section>
+  <section lang="fa" dir="rtl">
+    <h2>اگر Best باز نشد</h2>
+    <ol>
+      <li><b>Best</b> را روی پوشه‌ی <b>Applications</b> بکشید و از همان‌جا باز کنید.</li>
+      <li>مک می‌گوید نمی‌تواند Best را از نظر بدافزار بررسی کند (Best امضای پولی اپل ندارد). دکمه‌ی <b>Done</b> را بزنید، نه Move to Trash.</li>
+      <li><b>System Settings › Privacy &amp; Security</b> را باز کنید. پایین صفحه نوشته Best مسدود شد: دکمه‌ی <b>Open Anyway</b> را بزنید و رمز مک را وارد کنید.</li>
+      <li>Best را دوباره باز کنید و <b>Open</b> را بزنید. از این به بعد عادی باز می‌شود و به‌روزرسانی‌های داخل برنامه دیگر این مرحله را ندارند.</li>
+    </ol>
+    <p>یا در Terminal:</p>
+    <code>xattr -dr com.apple.quarantine /Applications/Best.app</code>
+  </section>
+  <section lang="zh">
+    <h2>如果 Best 无法打开</h2>
+    <ol>
+      <li>将 <b>Best</b> 拖到 <b>Applications</b>（应用程序），然后从那里打开。</li>
+      <li>macOS 会提示无法检查 Best 是否含有恶意软件（Best 没有付费的 Apple 签名）。请点击<b>完成</b>，不要点“移到废纸篓”。</li>
+      <li>打开<b>系统设置 › 隐私与安全性</b>。页面底部会提示 Best 已被阻止：点击<b>仍要打开</b>并输入 Mac 密码。</li>
+      <li>再次打开 Best 并点击<b>打开</b>。之后即可正常打开；通过 Best 内部更新时不再需要此步骤。</li>
+    </ol>
+    <p>或者在“终端”中运行：</p>
+    <code>xattr -dr com.apple.quarantine /Applications/Best.app</code>
+  </section>
+</main>
+</body>
+</html>

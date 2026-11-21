@@ -1,7 +1,7 @@
 // Main window: state, theme, sidebar and page routing.
 
 import { h, mount, icon, toast, ltr } from './dom.js';
-import { t, setLanguage, num } from './i18n.js';
+import { t, setLanguage, num, IS_MAC } from './i18n.js';
 import { renderServers, onTestResult } from './pages/servers.js';
 import { renderSubs } from './pages/subs.js';
 import { renderRouting } from './pages/routing.js';
@@ -137,7 +137,7 @@ export function serversInGroup(group = ui.group) {
 export function showError(e) {
   const msg = String((e && e.message) || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
   const [code, ...rest] = msg.split(':');
-  const known = ['PORT_BUSY', 'CORE_FAILED', 'TUN_FAILED', 'NO_SERVER', 'INVALID_URL', 'INVALID_BACKUP', 'SS_BAD_KEY', 'UPDATE_START_FAILED', 'UPDATE_UAC_DECLINED', 'CHECKSUM_MISMATCH'];
+  const known = ['PORT_BUSY', 'CORE_FAILED', 'TUN_FAILED', 'NO_SERVER', 'INVALID_URL', 'INVALID_BACKUP', 'SS_BAD_KEY', 'UPDATE_START_FAILED', 'UPDATE_UAC_DECLINED', 'CHECKSUM_MISMATCH', 'UPDATE_BAD_PACKAGE'];
   toast(known.includes(code) ? t(code, { d: rest.join(':').trim() }) : t('error', { d: msg }), 'error', 6000);
 }
 
@@ -224,7 +224,7 @@ function sidebar() {
   const engaged = S.core.running && (st.proxyMode === 'on' || st.proxyMode === 'pac' || st.tun);
   const statusTip = [`${t('core')}: ${core.trim()}`, `${t('localPorts')}: ${st.socksPort} · ${st.httpPort}`, `${t('lanSharing')}: ${st.allowLan ? t('on') : t('off')}`, `${t('privileges')}: ${S.isAdmin ? t('admin') : t('normalUser')}`].join('\n');
   const pin = ui.narrow ? null : h('button', {
-    type: 'button', class: `side-toggle ${small ? '' : 'pinned'}`, title: `${small ? t('side_pin') : t('side_unpin')} (Ctrl+B)`, 'aria-label': small ? t('side_pin') : t('side_unpin'),
+    type: 'button', class: `side-toggle ${small ? '' : 'pinned'}`, title: `${small ? t('side_pin') : t('side_unpin')} (${IS_MAC ? '⌘B' : 'Ctrl+B'})`, 'aria-label': small ? t('side_pin') : t('side_unpin'),
     'aria-pressed': String(!small), onClick: toggleSidebar,
   }, icon('pin', 17));
   const nav = (n) => {

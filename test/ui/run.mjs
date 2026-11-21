@@ -9,7 +9,9 @@ import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const ELECTRON = path.join(ROOT, 'node_modules', 'electron', 'dist', process.platform === 'win32' ? 'electron.exe' : 'electron');
+const ELECTRON = process.platform === 'darwin'
+  ? path.join(ROOT, 'node_modules', 'electron', 'dist', 'Electron.app', 'Contents', 'MacOS', 'Electron')
+  : path.join(ROOT, 'node_modules', 'electron', 'dist', process.platform === 'win32' ? 'electron.exe' : 'electron');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const freePort = () => new Promise((resolve) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => resolve(p)); }); });
 
@@ -46,9 +48,16 @@ async function connect(match) {
         const send = (method, params = {}) => new Promise((r) => { const n = ++id; pending.set(n, r); ws.send(JSON.stringify({ id: n, method, params })); });
         await send('Runtime.enable');
         const ev = async (expr) => {
-          const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true });
-          if (r.result.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || 'evaluate failed');
-          return r.result.result.value;
+          for (let attempt = 0; ; attempt++) {
+            const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true });
+            // A page still loading (slow machines) has no place to run code yet: wait and ask again.
+            if (r.error) {
+              if (attempt < 40 && /context|navigat|not found|destroyed/i.test(r.error.message || '')) { await wait(250); continue; }
+              throw new Error(`debugger: ${r.error.message || JSON.stringify(r.error)}`);
+            }
+            if (r.result.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || 'evaluate failed');
+            return r.result.result.value;
+          }
         };
         return { ws, send, ev, errors };
       }
@@ -61,6 +70,10 @@ async function connect(match) {
 // ---------------------------------------------------------------- tiny test runner
 const results = [];
 class Skip extends Error {}
+// Best's command key: Ctrl on Windows, ⌘ on macOS (CDP modifier bits: 2 = Ctrl, 4 = Meta).
+const MAC = process.platform === 'darwin';
+const CMD_BIT = MAC ? 4 : 2;
+const CMD_PROP = MAC ? 'metaKey' : 'ctrlKey';
 const CHECK_TIMEOUT = 30000; // one stuck check must not hang the whole run
 // UI_ONLY=<text>: run only the checks whose name contains it (quicker while fixing one thing).
 const ONLY = process.env.UI_ONLY || '';
@@ -78,6 +91,16 @@ try {
   const { send, ev } = page;
   await ev(`new Promise((r) => { const t = () => (document.querySelector('aside .nav-btn') ? r() : setTimeout(t, 100)); t(); })`);
   await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 820, deviceScaleFactor: 1, mobile: false });
+  if (MAC) {
+    // macOS slows the timers and animation frames of a window that is behind others (the build
+    // machine's window is never in front): bring it forward and keep it running at full speed.
+    const target = (await (await fetch(`http://127.0.0.1:${mainPort}/json`)).json())[0];
+    const mws = new WebSocket(target.webSocketDebuggerUrl);
+    await new Promise((r, j) => { mws.addEventListener('open', r); mws.addEventListener('error', j); });
+    const expression = "(() => { const { app, BrowserWindow } = require('electron'); const w = BrowserWindow.getAllWindows().find((x) => /index/.test(x.webContents.getURL())); app.focus({ steal: true }); w.webContents.setBackgroundThrottling(false); w.moveTop(); w.focus(); return true; })()";
+    await new Promise((r) => { mws.addEventListener('message', r, { once: true }); mws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression, includeCommandLineAPI: true, returnByValue: true } })); });
+    mws.close();
+  }
   await wait(400);
   let mx = 700; let my = 400;
   const move = async (x, y, steps = 10) => { for (let i = 1; i <= steps; i++) { await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: Math.round(mx + (x - mx) * i / steps), y: Math.round(my + (y - my) * i / steps) }); await wait(8); } mx = x; my = y; };
@@ -337,8 +360,8 @@ try {
     }
     await setSettings({ language: 'fa' }); await wait(250);
     await ev(`document.querySelector('${SP}').scrollTop = 500`); await wait(150);
-    await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'f', code: 'KeyF', windowsVirtualKeyCode: 70, modifiers: 2 });
-    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'f', code: 'KeyF', windowsVirtualKeyCode: 70, modifiers: 2 });
+    await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'f', code: 'KeyF', windowsVirtualKeyCode: 70, modifiers: CMD_BIT });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'f', code: 'KeyF', windowsVirtualKeyCode: 70, modifiers: CMD_BIT });
     await wait(200);
     const r = await ev(`({ focused: document.activeElement === document.querySelector('.set-find input'), scroll: Math.round(document.querySelector('${SP}').scrollTop) })`);
     assert(r.focused, 'search box not focused');
@@ -490,10 +513,16 @@ try {
     const inMain = (expression) => new Promise((r) => { const n = ++mid; const on = (m) => { const msg = JSON.parse(m.data); if (msg.id === n) { mws.removeEventListener('message', on); r(msg.result && msg.result.result && msg.result.result.value); } }; mws.addEventListener('message', on); mws.send(JSON.stringify({ id: n, method: 'Runtime.evaluate', params: { expression, includeCommandLineAPI: true, returnByValue: true } })); });
     const win = "require('electron').BrowserWindow.getAllWindows().find((w) => /index/.test(w.webContents.getURL()))";
     try {
-      assert(await inMain(`(${win}).minimize(), (${win}).isMinimized()`), 'window did not minimize');
+      await inMain(`(${win}).minimize()`);
+      // macOS minimizes with an animation: the state changes a moment later
+      for (let i = 0; i < 20 && !(await inMain(`(${win}).isMinimized()`)); i++) await wait(150);
+      assert(await inMain(`(${win}).isMinimized()`), 'window did not minimize');
       await wait(700);
-      await inMain(`(${win}).restore(), (${win}).focus()`); await wait(900);
-    } finally { mws.close(); }
+    } finally {
+      // always brought back: a window left minimized slows every later check down
+      await inMain(`(${win}).restore(), (${win}).focus()`).catch(() => {}); await wait(900);
+      mws.close();
+    }
     const after = await ev(`({ open: document.querySelector('aside').classList.contains('peek'), w: Math.round(document.querySelector('aside .side-panel').getBoundingClientRect().width) })`);
     assert(!after.open && after.w < 100, `menu opened by itself after the window came back (width ${after.w})`);
     await ev('document.activeElement && document.activeElement.blur()');
@@ -501,6 +530,7 @@ try {
   });
 
   await check('theme "follow Windows": the window buttons change colour with Windows light / dark', async () => {
+    if (MAC) throw new Skip('macOS draws its own window buttons');
     await setSettings({ theme: 'system' });
     const target = (await (await fetch(`http://127.0.0.1:${mainPort}/json`)).json())[0];
     const mws = new WebSocket(target.webSocketDebuggerUrl);
@@ -532,6 +562,9 @@ try {
   });
 
   await check('side menu: pinning animates the page width (no jump) and is remembered', async () => {
+    // The Mac build machine draws a window that is on no real screen only now and then: frames of a
+    // CSS transition cannot be counted there (the same CSS is counted on Windows).
+    if (MAC && process.env.CI) throw new Skip('animation frames are not drawn reliably on the build machine');
     const [rx] = await center('.brand img');
     await move(rx, 300); await wait(450);
     const pin = await center('.side-toggle');
@@ -723,7 +756,7 @@ try {
   }
 
   await check('server editor: every dropdown, switch and choice shows at once, for every protocol', async () => {
-    await ev(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN', key: 'n', ctrlKey: true, bubbles: true }))`); await wait(500);
+    await ev(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN', key: 'n', ${CMD_PROP}: true, bubbles: true }))`); await wait(500);
     assert(await ev(`Boolean(document.querySelector('.drawer'))`), 'editor did not open');
     const protos = await ev(`[...document.querySelectorAll('.drawer .ed-proto')].map((b) => b.textContent)`);
     const bad = [];
@@ -844,7 +877,7 @@ try {
   });
 
   await check('server editor opens and closes', async () => {
-    await ev(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN', key: 'n', ctrlKey: true, bubbles: true }))`); await wait(500);
+    await ev(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN', key: 'n', ${CMD_PROP}: true, bubbles: true }))`); await wait(500);
     assert(await ev(`Boolean(document.querySelector('.overlay, .drawer'))`), 'editor did not open');
     await ev(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`); await wait(500);
     assert(!(await ev(`Boolean(document.querySelector('.overlay, .drawer'))`)), 'editor did not close');

@@ -16,16 +16,20 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
 const EventEmitter = require('events');
+const zlib = require('zlib');
 const { app, session, net } = require('electron');
+const { coreAsset, coreFiles, exeName: platformExeName, devCoresFolder } = require('./platform');
 
 const MAX_DOWNLOAD = 200 * 1024 * 1024;
-const TAR = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
+// bsdtar on both systems (it unpacks zip and tar.gz); a full path, never one from the current folder.
+const TAR = process.platform === 'win32' ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : '/usr/bin/tar';
 
 const COMPONENTS = {
-  xray: { repo: 'XTLS/Xray-core', asset: () => 'Xray-windows-64.zip', kind: 'core' },
-  singbox: { repo: 'SagerNet/sing-box', asset: (tag) => `sing-box-${tag.replace(/^v/, '')}-windows-amd64.zip`, kind: 'core' },
+  // The file for this system and processor (platform.js: Windows x64, macOS Apple Silicon / Intel).
+  xray: { repo: 'XTLS/Xray-core', asset: (tag) => coreAsset('xray', tag).name, kind: 'core' },
+  singbox: { repo: 'SagerNet/sing-box', asset: (tag) => coreAsset('singbox', tag).name, kind: 'core' },
   // Optional third core (Clash.Meta), installed on demand from Updates.
-  mihomo: { repo: 'MetaCubeX/mihomo', asset: (tag) => `mihomo-windows-amd64-compatible-${tag}.zip`, kind: 'core', optional: true },
+  mihomo: { repo: 'MetaCubeX/mihomo', asset: (tag) => coreAsset('mihomo', tag).name, kind: 'core', optional: true },
   geoip: { repo: 'v2fly/geoip', asset: () => 'geoip.dat', sum: 'geoip.dat.sha256sum', kind: 'geo', file: 'geoip.dat' },
   geosite: { repo: 'v2fly/domain-list-community', asset: () => 'dlc.dat', sum: 'dlc.dat.sha256sum', kind: 'geo', file: 'geosite.dat' },
   // Optional country rule files, used as ext:geosite_XX.dat / ext:geoip_XX.dat (same sources as 3x-ui).
@@ -86,7 +90,7 @@ function digestFromSumFile(text, assetName) {
 const rateLimited = (e) => /HTTP (403|429)/.test(String(e && e.message));
 
 function bundledDir() {
-  return app.isPackaged ? path.join(process.resourcesPath, 'cores') : path.join(__dirname, '..', 'resources', 'cores');
+  return app.isPackaged ? path.join(process.resourcesPath, 'cores') : path.join(__dirname, '..', 'resources', devCoresFolder());
 }
 function userCoresDir() { return path.join(app.getPath('userData'), 'cores'); }
 
@@ -114,7 +118,7 @@ function runRoot() { return adminOnly() ? path.join(process.resourcesPath, 'run'
 function coreTargetDir() { return adminOnly() ? protectedCoresDir() : userCoresDir(); }
 function stagingRoot() { return adminOnly() ? path.join(process.resourcesPath, 'update-staging') : path.join(app.getPath('userData'), 'update-staging'); }
 const coreSub = (core) => (core === 'xray' ? 'xray' : core === 'mihomo' ? 'mihomo' : 'sing-box');
-const exeName = (core) => (core === 'xray' ? 'xray.exe' : core === 'mihomo' ? 'mihomo.exe' : 'sing-box.exe');
+const exeName = (core) => platformExeName(core);
 /** Updater id → core name. */
 const coreOfId = (id) => (id === 'singbox' ? 'sing-box' : id);
 /** Is the optional mihomo core installed? */
@@ -161,7 +165,10 @@ function swapFiles(destDir, files) {
   fs.mkdirSync(prevDir, { recursive: true });
   fs.mkdirSync(destDir, { recursive: true });
   for (const name of fs.readdirSync(destDir)) fs.renameSync(path.join(destDir, name), path.join(prevDir, name));
-  for (const [name, src] of files) fs.copyFileSync(src, path.join(destDir, name));
+  for (const [name, src] of files) {
+    fs.copyFileSync(src, path.join(destDir, name));
+    if (process.platform !== 'win32') fs.chmodSync(path.join(destDir, name), 0o755); // a program must stay runnable
+  }
 }
 
 /** Remove parked copies left by earlier updates (best effort; a running one is skipped). */
@@ -487,23 +494,31 @@ class Updater extends EventEmitter {
       fs.mkdirSync(staging, { recursive: true });
 
       if (c.kind === 'core') {
-        const zip = path.join(staging, 'pkg.zip');
-        fs.writeFileSync(zip, data);
+        const { format } = coreAsset(id, rel.tag_name);
         const out = path.join(staging, 'x');
         fs.mkdirSync(out);
-        await run(TAR, ['-xf', zip, '-C', out]);
-        const want = id === 'xray' ? ['xray.exe'] : id === 'mihomo' ? ['mihomo.exe'] : ['sing-box.exe', 'libcronet.dll'];
+        const want = coreFiles(id);
+        if (format === 'gz') {
+          // mihomo for macOS: one gzip-compressed program, no archive around it.
+          fs.writeFileSync(path.join(out, want[0]), zlib.gunzipSync(data, { maxOutputLength: MAX_DOWNLOAD }));
+        } else {
+          const pkg = path.join(staging, format === 'tgz' ? 'pkg.tar.gz' : 'pkg.zip');
+          fs.writeFileSync(pkg, data);
+          await run(TAR, ['-xf', pkg, '-C', out]);
+        }
         const found = {};
         const walk = (dir) => {
           for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
             const p = path.join(dir, e.name);
             if (e.isDirectory()) walk(p);
+            else if (!e.isFile()) continue; // a link in a package is never followed
             else if (want.includes(e.name)) found[e.name] = p;
-            else if (id === 'mihomo' && /^mihomo[\w.-]*\.exe$/i.test(e.name)) found['mihomo.exe'] = p; // released as mihomo-windows-amd64-….exe
+            else if (id === 'mihomo' && process.platform === 'win32' && /^mihomo[\w.-]*\.exe$/i.test(e.name)) found['mihomo.exe'] = p; // released as mihomo-windows-amd64-….exe
           }
         };
         walk(out);
         if (!found[want[0]]) throw new Error('executable missing in package');
+        if (process.platform !== 'win32') fs.chmodSync(found[want[0]], 0o755);
         // Run the new core once before using it.
         const ver = await run(found[want[0]], [id === 'mihomo' ? '-v' : 'version']);
         if (!/Xray|sing-box|Mihomo/i.test(ver)) throw new Error('new core did not start');

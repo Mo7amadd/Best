@@ -18,6 +18,7 @@
     "fonts": "node scripts/copy-fonts.js",
     "icons": "node scripts/make-icons.js",
     "dist": "npm run fonts && npm run icons && electron-builder --win nsis && node scripts/make-portable.js",
+    "dist:mac": "npm run fonts && npm run icons && node scripts/fetch-mac-cores.js && electron-builder --mac",
     "art": "electron scripts/make-installer-art.js",
     "test:ui": "node test/ui/run.mjs",
     "test:perf": "node test/ui/perf.mjs",
@@ -55,12 +56,12 @@
     ],
     "extraResources": [
       {
-        "from": "resources/cores",
-        "to": "cores"
-      },
-      {
         "from": "resources/icons",
-        "to": "icons"
+        "to": "icons",
+        "filter": [
+          "**/*",
+          "!mac-*"
+        ]
       },
       {
         "from": "build/THIRD-PARTY-NOTICES.txt",
@@ -87,7 +88,84 @@
       ],
       "icon": "build/icon.ico",
       "artifactName": "Best-Setup-v${version}.${ext}",
-      "requestedExecutionLevel": "asInvoker"
+      "requestedExecutionLevel": "asInvoker",
+      "extraResources": [
+        {
+          "from": "resources/cores",
+          "to": "cores"
+        }
+      ]
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon-mac.png",
+      "category": "public.app-category.utilities",
+      "artifactName": "Best-v${version}-mac-${arch}.${ext}",
+      "minimumSystemVersion": "12.0",
+      "darkModeSupport": true,
+      "identity": "-",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "extendInfo": {
+        "NSScreenCaptureUsageDescription": "Best looks for a QR code on the screen when you ask it to scan one."
+      },
+      "extraResources": [
+        {
+          "from": "resources/cores-mac-${arch}",
+          "to": "cores"
+        },
+        {
+          "from": "resources/icons",
+          "to": "icons",
+          "filter": [
+            "mac-*"
+          ]
+        }
+      ]
+    },
+    "dmg": {
+      "title": "Best ${version}",
+      "artifactName": "Best-v${version}-mac-${arch}.${ext}",
+      "background": "build/mac/dmg-background.png",
+      "window": {
+        "width": 600,
+        "height": 400
+      },
+      "iconSize": 96,
+      "contents": [
+        {
+          "x": 170,
+          "y": 175,
+          "type": "file"
+        },
+        {
+          "x": 430,
+          "y": 175,
+          "type": "link",
+          "path": "/Applications"
+        },
+        {
+          "x": 465,
+          "y": 50,
+          "type": "file",
+          "path": "build/mac/If Best does not open.html"
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,

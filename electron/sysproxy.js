@@ -1,5 +1,5 @@
 'use strict';
-// Windows system proxy (WinINet: Edge, Chrome, most desktop apps).
+// Windows system proxy (WinINet: Edge, Chrome, most desktop apps). macOS: mac/sysproxy.js.
 // All values written here are validated numbers / whitelisted characters, and PowerShell is called
 // with an argument array, so nothing user-controlled can be executed.
 
@@ -59,4 +59,5 @@ if ($pac -and $pac -like 'http://127.0.0.1:*/proxy.pac*') { Remove-ItemProperty 
   await ps(script + '\n' + REFRESH);
 }
 
-module.exports = { applySystemProxy };
+// macOS has its own (networksetup); the Windows code above is not used there.
+module.exports = process.platform === 'darwin' ? require('./mac/sysproxy') : { applySystemProxy };

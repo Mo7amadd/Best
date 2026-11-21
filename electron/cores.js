@@ -21,6 +21,7 @@ const { applyBinding } = require('../src/core/bind');
 const { buildMihomoConfig, buildMihomoTestConfig } = require('../src/core/mihomo-config');
 const { GEOSITE } = require('../src/core/country');
 const { coreExe, geoDir, allCoreExes, runRoot } = require('./updater');
+const { exeName, parsePs, devCoresFolder } = require('./platform');
 const { buildSingBoxConfig, buildTunConfig, buildSingBoxTestConfig, serverNames, useServerIps } = require('../src/core/singbox-config');
 
 /**
@@ -53,7 +54,7 @@ function tunSignature(settings) {
 function coresDir() {
   return app.isPackaged
     ? path.join(process.resourcesPath, 'cores')
-    : path.join(__dirname, '..', 'resources', 'cores');
+    : path.join(__dirname, '..', 'resources', devCoresFolder());
 }
 
 /** Updated cores in the user profile win over the bundled ones (see updater.js). */
@@ -63,8 +64,8 @@ function exe(core) {
 
 function bundledExe(core) {
   return core === 'xray'
-    ? path.join(coresDir(), 'xray', 'xray.exe')
-    : path.join(coresDir(), 'sing-box', 'sing-box.exe');
+    ? path.join(coresDir(), 'xray', exeName('xray'))
+    : path.join(coresDir(), 'sing-box', exeName('sing-box'));
 }
 
 /**
@@ -371,12 +372,34 @@ class CoreManager extends EventEmitter {
 
   /** Kill cores left running by a previous crash (only our own executables, matched by full path). */
   static killOrphans() {
+    if (process.platform === 'darwin') return killOrphansMac([...new Set([...allCoreExes(), bundledExe('xray'), bundledExe('sing-box')])]);
     const paths = [...new Set([...allCoreExes(), bundledExe('xray'), bundledExe('sing-box')])].map((p) => `'${p.replace(/['‘’‚‛]/g, "$&$&")}'`);
     const script = `Get-Process -Name xray,sing-box,mihomo -ErrorAction SilentlyContinue | Where-Object { @(${paths.join(',')}) -contains $_.Path } | Stop-Process -Force -ErrorAction SilentlyContinue`;
     return new Promise((resolve) => {
       execFile(SYS_PS, ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 8000 }, () => resolve());
     });
   }
+}
+
+/**
+ * macOS: the same clean-up with ps. Only processes whose program is exactly one of our core files
+ * are stopped (another program named xray is left alone); a process that ignores the polite stop
+ * is ended after 2 seconds.
+ */
+async function killOrphansMac(paths) {
+  const ours = new Set(paths);
+  // Our cores now running (looked up afresh each time: a process id can be reused by another program).
+  const find = () => new Promise((resolve) => {
+    execFile('/bin/ps', ['-axww', '-o', 'pid=,comm='], { timeout: 8000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => {
+      resolve(err ? [] : parsePs(stdout).filter((p) => ours.has(p.path) && p.pid !== process.pid).map((p) => p.pid));
+    });
+  });
+  const first = await find();
+  for (const pid of first) { try { process.kill(pid, 'SIGTERM'); } catch { /* gone, or not ours */ } }
+  if (!first.length) return;
+  await new Promise((r) => setTimeout(r, 2000));
+  const left = new Set(await find());
+  for (const pid of first) if (left.has(pid)) { try { process.kill(pid, 'SIGKILL'); } catch { /* stopped meanwhile */ } }
 }
 
 module.exports = { CoreManager, coresDir, exe };

@@ -1,7 +1,7 @@
 // Settings page.
 
 import { h, icon, button, toggle, select, field, segmented, confirmDialog, passwordDialog, modal, toast, ltr } from '../dom.js';
-import { t, locale } from '../i18n.js';
+import { t, locale, IS_MAC } from '../i18n.js';
 import { S, ui, api, run, render } from '../app.js';
 
 const set = (patch) => run(() => api.setSettings(patch));
@@ -340,7 +340,9 @@ export function focusSettingsSearch() {
 /** Records a key combination ("Control+Alt+B"); Backspace / Delete clears it. */
 function hotkeyInput(action) {
   const cur = (S.settings.hotkeys || {})[action] || '';
-  const show = (acc) => acc.replace('Control', 'Ctrl');
+  // macOS writes keys as symbols (⌃⌥⇧⌘B); "Super" is the ⌘ key there.
+  const MAC_KEYS = { Control: '⌃', Alt: '⌥', Shift: '⇧', Super: '⌘' };
+  const show = (acc) => (IS_MAC ? acc.split('+').map((p) => MAC_KEYS[p] || p).join('') : acc.replace('Control', 'Ctrl'));
   const el = h('input', { class: 'input mono', dir: 'ltr', readonly: true, value: show(cur), placeholder: t('hk_none'), 'data-keep': `hk-${action}` });
   el.addEventListener('keydown', (e) => {
     e.preventDefault();
@@ -355,7 +357,7 @@ function hotkeyInput(action) {
     else if (['Space', 'Home', 'End', 'Insert', 'Delete', 'PageUp', 'PageDown'].includes(e.code)) key = e.code;
     else if (/^Arrow(Up|Down|Left|Right)$/.test(e.code)) key = e.code.slice(5);
     const mods = [e.ctrlKey && 'Control', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Super'].filter(Boolean);
-    if (!key || !mods.length) { el.value = mods.length ? `${mods.map(show).join('+')}+…` : el.value; return; }
+    if (!key || !mods.length) { el.value = mods.length ? `${mods.map(show).join(IS_MAC ? '' : '+')}${IS_MAC ? '' : '+'}…` : el.value; return; }
     const acc = [...mods, key].join('+');
     el.value = show(acc);
     save(acc);
@@ -507,14 +509,15 @@ function buildPages() {
             numField('httpPort', t('httpPort'), ...portRange),
             numField('pacPort', t('pacPort'), ...portRange)),
           textField('proxyBypass', t('proxyBypass'))),
-        card(t('sec_uwp'),
+        // Microsoft Store apps exist on Windows only.
+        IS_MAC ? null : card(t('sec_uwp'),
           h('div', { class: 'note' }, icon('info', 16), h('span', null, t('uwp_help'))),
           h('div', { class: 'row' }, button(t('uwp_choose'), { icon: 'edit', onClick: storeAppsDialog }))),
       ]],
       ['TUN', [
         h('div', { class: `note ${S.isAdmin ? 'good' : 'warn'}` }, icon(S.isAdmin ? 'check' : 'alert', 16),
           h('span', { class: 'grow' }, S.isAdmin ? t('adminYes') : t('adminNo')),
-          S.isAdmin ? null : button(t('runAsAdmin'), { size: 'sm', onClick: () => api.relaunchAdmin() })),
+          S.isAdmin || IS_MAC ? null : button(t('runAsAdmin'), { size: 'sm', onClick: () => api.relaunchAdmin() })),
         S.secureCores === false ? h('div', { class: 'note warn' }, icon('alert', 16), h('span', null, t(S.portable ? 'tunPortableWarn' : 'tunUserInstallWarn'))) : null,
         card(null,
           h('div', null,
@@ -698,7 +701,9 @@ export function renderSettings() {
     onInput: (e) => findSettings(e.currentTarget),
     onFocus: (e) => { if (e.currentTarget.value.trim()) findSettings(e.currentTarget); },
     onKeydown: (e) => findKeys(e),
-  }), h('kbd', { class: 'find-kbd', 'aria-hidden': 'true' }, 'Ctrl F'));
+  // macOS: "⌘F" kept in this order inside right-to-left text by an isolate (a dir attribute would also
+  // flip the label's own position onto the magnifier).
+  }), h('kbd', { class: 'find-kbd', 'aria-hidden': 'true' }, IS_MAC ? '⁦⌘F⁩' : 'Ctrl F'));
 
   // narrow: pages on one row, the open page's subsections on a second one, both above the page
   const top = view.narrow ? h('div', { class: 'set-top' },
