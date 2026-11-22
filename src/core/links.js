@@ -5,7 +5,7 @@
 
 const {
   cleanText, safeDecodeURIComponent, decodeComponent, b64decode, b64encode,
-  parsePort, parseHost, randomId, splitList, boolish,
+  parsePort, parseHost, randomId, splitList, boolish, unsafeXrayJson,
 } = require('./util');
 
 const MAX_LINK_LENGTH = 16384;
@@ -592,6 +592,9 @@ function normalizeServer(input) {
       for (const k of ['headerType', 'mode']) str(k, 32);
       str('host', 253); str('path', 1024); str('serviceName', 256); str('seed', 128); str('extra', 16384);
       if (s.extra) { try { JSON.parse(s.extra); } catch { delete s.extra; } }
+      // The XHTTP "extra" goes into Xray as written: refuse what could touch local files or crash the core.
+      const bad = s.extra ? unsafeXrayJson(JSON.parse(s.extra), { files: true }) : '';
+      if (bad) throw new Error(`XHTTP extra is not allowed: ${bad}`);
       if (s.network === 'grpc') str('authority', 253);
       if (s.network === 'kcp') { num('mtu', 576, 1460); num('tti', 10, 100); }
     }
@@ -614,7 +617,11 @@ function normalizeServer(input) {
     const cs = matchText(input.cipherSuites, CIPHER_LIST, 512); if (cs) s.cipherSuites = cs;
   }
   // finalmask (fm=…): Xray stream-level masks (fragment, noise, salamander, udphop…).
-  if (protocol !== 'wireguard') { const fm = jsonObjectText(input.finalmask); if (fm) s.finalmask = fm; }
+  if (protocol !== 'wireguard') {
+    const fm = jsonObjectText(input.finalmask);
+    if (fm && unsafeXrayJson(JSON.parse(fm), { files: true })) throw new Error('finalmask is not allowed');
+    if (fm) s.finalmask = fm;
+  }
   if (s.tls === 'reality') {
     str('publicKey', 128); str('shortId', 32); str('spiderX', 256);
     const pqv = matchText(input.pqv, B64ISH, 8192); if (pqv) s.pqv = pqv;

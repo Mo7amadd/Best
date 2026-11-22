@@ -127,6 +127,57 @@ test('JSON configs: an XDRIVE outbound may only use a cloud service, in any spel
   assert.deepStrictEqual(xrayTestConfig(cfg, 10808).outbounds.map((o) => o.tag), keep);
 });
 
+// Same review, one level down: an XHTTP "downloadSettings" is a whole second stream config.
+test('nested Xray JSON: XDRIVE, a crashing downloadSettings and certificate files are refused in links and configs', () => {
+  const { sanitizeConfig, hardenRaw } = require('../src/core/custom');
+  const { parseLink, normalizeServer } = require('../src/core/links');
+  const id = 'b831381d-6324-4d53-ad4f-8cda48b30811';
+  const link = (extra) => `vless://${id}@1.2.3.4:443?type=xhttp&security=tls&sni=a.com&path=%2F&extra=${encodeURIComponent(JSON.stringify(extra))}#x`;
+  for (const extra of [
+    { downloadSettings: { network: 'xdrive', xdriveSettings: { service: 'local', remoteFolder: 'C:/x' } } }, // crashed Xray 26.11.9
+    { downloadSettings: { address: 'b.com', port: 443, network: 'raw' } },
+    { downloadSettings: { address: 'b.com', port: 443 } },
+    { DownloadSettings: { network: 'xhttp', XdriveSettings: { service: 'local' } } },
+    { downloadSettings: { network: 'xhttp', security: 'tls', tlsSettings: { certificates: [{ certificateFile: 'C:/Users/me/key.pem', keyFile: 'C:/Users/me/key.pem' }] } } },
+    { downloadSettings: { network: 'xhttp', tlsSettings: { MasterKeyLog: 'C:/k.log' } } },
+  ]) assert.throws(() => parseLink(link(extra)), /extra is not allowed/, JSON.stringify(extra));
+  // A normal downloadSettings (another XHTTP server) still works, and a backup is checked the same way.
+  assert.ok(parseLink(link({ downloadSettings: { address: 'b.com', port: 443, network: 'xhttp', security: 'tls', xhttpSettings: { path: '/d' } } })).extra);
+  assert.throws(() => normalizeServer({ protocol: 'vless', address: 'a.com', port: 443, uuid: id, network: 'xhttp', extra: JSON.stringify({ downloadSettings: { network: 'xdrive' } }) }));
+  assert.throws(() => normalizeServer({ protocol: 'vless', address: 'a.com', port: 443, uuid: id, finalmask: JSON.stringify({ tcp: [{ type: 'x', settings: { certificateFile: 'C:/a' } }] }) }));
+  // Full configs: the outbound with a crashing / XDRIVE downloadSettings is dropped; certificate files are cut out.
+  const cfg = { outbounds: [
+    { protocol: 'vless', tag: 'dl', settings: {}, streamSettings: { network: 'xhttp', xhttpSettings: { extra: { downloadSettings: { network: 'xdrive', xdriveSettings: { service: 'local' } } } } } },
+    { protocol: 'vless', tag: 'raw', settings: {}, streamSettings: { network: 'xhttp', xhttpSettings: { downloadSettings: { network: 'raw' } } } },
+    { protocol: 'trojan', tag: 'cert', settings: {}, streamSettings: { security: 'tls', tlsSettings: { certificates: [{ certificateFile: 'C:/a.pem', KeyFile: 'C:/b.pem', usage: 'encipherment' }] } } },
+  ] };
+  for (const out of [sanitizeConfig(cfg, 'xray', []), hardenRaw(cfg, 'xray')]) {
+    assert.deepStrictEqual(out.outbounds.map((o) => o.tag), ['cert']);
+    assert.deepStrictEqual(out.outbounds[0].streamSettings.tlsSettings.certificates, [{ usage: 'encipherment' }]);
+  }
+});
+
+// Go (Xray, sing-box) matches JSON keys in any letter case and a later duplicate wins.
+test('JSON configs: a second spelling of a key cannot slip past the checks', () => {
+  const { sanitizeConfig, hardenRaw } = require('../src/core/custom');
+  const x = { outbounds: [{ protocol: 'vless', Protocol: 'loopback', tag: 'a', settings: {} }, { Protocol: 'freedom', tag: 'b' }, { protocol: 'freedom', tag: 'ok' }] };
+  for (const out of [sanitizeConfig(x, 'xray', []), hardenRaw(x, 'xray')]) assert.deepStrictEqual(out.outbounds.map((o) => o.tag), ['ok']);
+  const sb = {
+    outbounds: [{ type: 'vless', Type: 'tor', tag: 't' }, { type: 'direct', tag: 'ok' }],
+    route: { rule_set: [{ type: 'remote', Type: 'local', tag: 'r', path: 'C:/Users/me/secret.json' }, { type: 'remote', tag: 'ok', url: 'https://a.com/x.srs' }] },
+    endpoints: [{ type: 'wireguard', TYPE: 'tailscale', tag: 'e' }],
+  };
+  for (const out of [sanitizeConfig(sb, 'sing-box', []), hardenRaw(sb, 'sing-box')]) {
+    assert.deepStrictEqual(out.outbounds.map((o) => o.tag), ['ok']);
+    assert.deepStrictEqual(out.route.rule_set.map((r) => r.tag), ['ok']);
+    assert.deepStrictEqual(out.endpoints || [], []);
+  }
+  // Prototype keys never come through.
+  const proto = JSON.parse('{"outbounds":[{"protocol":"freedom","tag":"p","__proto__":{"polluted":1}}]}');
+  assert.strictEqual(sanitizeConfig(proto, 'xray', []).outbounds[0].polluted, undefined);
+  assert.strictEqual({}.polluted, undefined);
+});
+
 test('LAN sharing: names that point at this computer are caught after resolving', () => {
   const { parseLink } = require('../src/core/links');
   const { sanitizeRouting, effectiveRouting } = require('../src/core/routing');

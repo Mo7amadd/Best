@@ -6,6 +6,8 @@
 // a listener, write files, give the remote side a way back into this computer or the LAN
 // (Xray "reverse", api, metrics, sing-box clash_api / external_ui, services, tailscale…) is dropped.
 
+const { unsafeXrayJson } = require('./util');
+
 const XRAY_KEEP = ['dns', 'routing', 'outbounds', 'policy', 'observatory', 'burstObservatory', 'fakedns'];
 const SB_KEEP = ['dns', 'route', 'outbounds', 'endpoints'];
 const XRAY_LEVELS = ['debug', 'info', 'warning', 'error', 'none'];
@@ -20,38 +22,21 @@ const XRAY_OUT = ['freedom', 'blackhole', 'dns', 'vless', 'vmess', 'trojan', 'sh
 const SB_OUT = ['direct', 'block', 'dns', 'selector', 'urltest', 'socks', 'http', 'shadowsocks', 'vmess', 'trojan', 'naive', 'wireguard', 'hysteria', 'shadowtls', 'vless', 'tuic', 'hysteria2', 'anytls'];
 const SB_ENDPOINTS = ['wireguard'];
 
-// Xray's XDRIVE transport relays traffic through a storage service. Its "local" service creates,
-// writes, lists and deletes files in any folder named by "remoteFolder", and "template" sends
-// requests of any method, header and body to any URL (LAN devices included), so an untrusted
-// config may only use the cloud services. The names match Xray's own (case-sensitive) switch.
-const XDRIVE_SERVICES = ['google-drive', 'Google Drive', 's3'];
-
-// Xray reads JSON with Go, which matches key names regardless of case ("XDRIVESettings",
-// "Service"…) and lets a later duplicate win, so every spelling of a key is checked.
-const valuesOf = (obj, name) => Object.keys(obj).filter((k) => k.toLowerCase() === name).map((k) => obj[k]);
-
-/** An Xray outbound from an untrusted config: a carrying protocol and no XDRIVE service that touches local files. */
+/**
+ * An Xray outbound from an untrusted config: a carrying protocol, and nothing at any depth that
+ * util.unsafeXrayJson refuses (XDRIVE "local" / "template", a non-XHTTP "downloadSettings").
+ * A stream settings value that is not an object is refused too (Xray would not read it).
+ */
 function xrayOutboundAllowed(o) {
   if (!isObj(o) || !XRAY_OUT.includes(o.protocol)) return false;
-  const ssList = valuesOf(o, 'streamsettings');
-  if (!ssList.length) return true;
-  return ssList.every((ss) => {
-    if (ss === null) return true;
-    if (!isObj(ss)) return false;
-    const xdrive = valuesOf(ss, 'network').some((n) => String(n).toLowerCase() === 'xdrive');
-    const settings = valuesOf(ss, 'xdrivesettings');
-    if (!xdrive && !settings.length) return true;
-    return settings.length > 0 && settings.every((x) => {
-      if (!isObj(x)) return false;
-      const services = valuesOf(x, 'service');
-      return services.length > 0 && services.every((s) => XDRIVE_SERVICES.includes(s));
-    });
-  });
+  if (Object.keys(o).some((k) => k.toLowerCase() === 'streamsettings' && o[k] !== null && !isObj(o[k]))) return false;
+  return !unsafeXrayJson(o);
 }
 
 /**
  * Remove, at any depth, keys that make a core read or write local files or run programs
- * (sing-box *_path / *_directory / executable*, openconnect wrappers, Xray masterKeyLog) or that
+ * (sing-box *_path / *_directory / executable*, openconnect wrappers, Xray masterKeyLog and TLS
+ * certificateFile / keyFile, which would read any file as a client certificate) or that
  * send connection details elsewhere (Xray rule webhooks) or open a way back in (Xray "reverse").
  * Asset references that climb out of the asset folder ("ext:../x.dat:tag") are dropped too.
  */
@@ -63,8 +48,29 @@ function stripDangerous(v, depth = 0) {
   const out = {};
   for (const [k, val] of Object.entries(v)) {
     if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
-    if (/(_path|_directory|_dir)$/i.test(k) || /^executable/i.test(k) || /^(masterKeyLog|webhook|reverse|wrapper_path|csd|hip|tncc|extra_args|torrc)$/i.test(k)) continue;
+    if (/(_path|_directory|_dir)$/i.test(k) || /^executable/i.test(k) || /^(masterKeyLog|certificateFile|keyFile|webhook|reverse|wrapper_path|csd|hip|tncc|extra_args|torrc)$/i.test(k)) continue;
     const c = stripDangerous(val, depth + 1);
+    if (c !== undefined) out[k] = c;
+  }
+  return out;
+}
+
+/**
+ * Xray and sing-box read JSON with Go, which matches a key whatever its letter case and lets a
+ * later duplicate win: {"protocol": "vless", "Protocol": "loopback"} runs a loopback outbound.
+ * Keep only that last spelling of every key (at any depth), so the checks below see what the
+ * core will see; a section kept under another spelling is then simply not found and dropped.
+ */
+function lastSpelling(v, depth = 0) {
+  if (depth > 60) return undefined;
+  if (Array.isArray(v)) return v.map((x) => lastSpelling(x, depth + 1)).filter((x) => x !== undefined);
+  if (!isObj(v)) return v;
+  const keys = Object.keys(v).filter((k) => k !== '__proto__' && k !== 'constructor' && k !== 'prototype');
+  const last = new Map(keys.map((k) => [k.toLowerCase(), k]));
+  const out = {};
+  for (const k of keys) {
+    if (last.get(k.toLowerCase()) !== k) continue;
+    const c = lastSpelling(v[k], depth + 1);
     if (c !== undefined) out[k] = c;
   }
   return out;
@@ -72,7 +78,7 @@ function stripDangerous(v, depth = 0) {
 
 /** Keep only the trusted top-level sections of an untrusted config. `ownTags` = Best's inbound tags. */
 function sanitizeConfig(config, core, ownTags = []) {
-  const src = isObj(config) ? config : {};
+  const src = isObj(config) ? lastSpelling(config) : {};
   const out = {};
   if (core === 'xray') {
     for (const k of XRAY_KEEP) if (src[k] !== undefined) out[k] = JSON.parse(JSON.stringify(src[k]));
@@ -197,7 +203,7 @@ function xrayTestConfig(config, port, { socks = false } = {}) {
  * because such a config can also arrive from a backup file or be planted in the data folder.
  */
 function hardenRaw(config, core) {
-  const c = isObj(config) ? JSON.parse(JSON.stringify(config)) : {};
+  const c = isObj(config) ? lastSpelling(JSON.parse(JSON.stringify(config))) : {};
   if (core === 'xray') {
     for (const k of ['api', 'reverse', 'metrics', 'stats']) delete c[k];
     c.log = { loglevel: isObj(c.log) && XRAY_LEVELS.includes(c.log.loglevel) ? c.log.loglevel : 'warning' };

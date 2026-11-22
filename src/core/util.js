@@ -127,7 +127,50 @@ function checkSs2022Key(s) {
   if (!ok) throw new Error('SS_BAD_KEY');
 }
 
+// ---- Xray JSON that comes from outside (custom configs, a link's XHTTP "extra" or "fm")
+// Xray's XDRIVE transport relays traffic through a storage service. Its "local" service creates,
+// writes, lists and deletes files in any folder named by "remoteFolder", and "template" sends
+// requests of any method, header and body to any URL (LAN devices included), so outside JSON may
+// only use the cloud services. The names match Xray's own (case-sensitive) switch.
+const XDRIVE_SERVICES = ['google-drive', 'Google Drive', 's3'];
+// Go matches JSON key names regardless of case ("XDRIVESettings", "Service"…) and lets a later
+// duplicate win, so every spelling of a key is looked at.
+const keysNamed = (obj, name) => Object.keys(obj).filter((k) => k.toLowerCase() === name).map((k) => obj[k]);
+const isPlainObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+
+/**
+ * Why a piece of outside Xray JSON must not run, or '' when it may. Looked for at every depth,
+ * because an XHTTP "downloadSettings" is a whole second stream config:
+ *   - XDRIVE with any service but the cloud ones;
+ *   - a "downloadSettings" that is not XHTTP (Xray 26.11.9 crashes on it when it connects);
+ *   - with `files`: TLS certificates read from files (certificateFile / keyFile) or a TLS key log
+ *     written to one (masterKeyLog). Full configs strip those keys instead (custom.js).
+ */
+function unsafeXrayJson(v, { files = false } = {}, depth = 0) {
+  if (depth > 40) return 'nested too deep';
+  if (Array.isArray(v)) {
+    for (const x of v) { const r = unsafeXrayJson(x, { files }, depth + 1); if (r) return r; }
+    return '';
+  }
+  if (!isPlainObj(v)) return '';
+  if (files && Object.keys(v).some((k) => ['certificatefile', 'keyfile', 'masterkeylog'].includes(k.toLowerCase()))) return 'a local file';
+  const xdrive = keysNamed(v, 'network').some((n) => String(n).toLowerCase() === 'xdrive');
+  const xs = keysNamed(v, 'xdrivesettings');
+  if (xdrive || xs.length) {
+    const cloud = (x) => isPlainObj(x) && keysNamed(x, 'service').length > 0 && keysNamed(x, 'service').every((s) => XDRIVE_SERVICES.includes(s));
+    if (!xs.length || !xs.every(cloud)) return 'an XDRIVE service other than google-drive / s3';
+  }
+  for (const d of keysNamed(v, 'downloadsettings')) {
+    if (d === null) continue;
+    const nets = isPlainObj(d) ? keysNamed(d, 'network') : [];
+    if (!nets.length || !nets.every((n) => ['xhttp', 'splithttp'].includes(String(n).toLowerCase()))) return 'downloadSettings that are not XHTTP';
+  }
+  for (const x of Object.values(v)) { const r = unsafeXrayJson(x, { files }, depth + 1); if (r) return r; }
+  return '';
+}
+
 module.exports = {
+  unsafeXrayJson,
   cleanText, safeDecodeURIComponent, decodeComponent, looksLikeBase64, b64decode, b64encode,
   parsePort, parseHost, randomId, splitList, boolish, checkSs2022Key,
 };
