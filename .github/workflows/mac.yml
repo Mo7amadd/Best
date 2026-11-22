@@ -56,7 +56,9 @@ jobs:
       - name: Interface tests (development app, throw-away data, system proxy untouched)
         run: npm run test:ui
       - name: Build dmg and zip (free ad-hoc signature)
-        run: npx electron-builder --mac "--$ARCH" --publish never
+        # Targets named here, so only this Mac's architecture is built (with "--mac" alone the
+        # arch list in package.json wins and both are built).
+        run: npx electron-builder --mac dmg zip "--$ARCH" --publish never
       - name: Check the built app
         timeout-minutes: 15
         env:

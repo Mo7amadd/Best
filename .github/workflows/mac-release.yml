@@ -72,7 +72,8 @@ jobs:
       - name: Interface tests
         run: npm run test:ui
       - name: Build dmg and zip (free ad-hoc signature)
-        run: npx electron-builder --mac "--$ARCH" --publish never
+        # Targets named here, so only this Mac's architecture is built (see mac.yml).
+        run: npx electron-builder --mac dmg zip "--$ARCH" --publish never
       - name: Check the built app
         timeout-minutes: 15
         run: node test/mac/smoke.mjs "$ARCH" "dist/smoke-$ARCH"
