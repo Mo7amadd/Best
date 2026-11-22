@@ -1652,7 +1652,11 @@ function registerIpc() {
   });
   handle('server:parse', (link) => parseLink(String(link || '')));
   handle('server:preview', (input) => {
-    try { return { link: toLink(normalizeServer(input)) }; } catch (e) { return { error: cleanText(e.message, 200) }; }
+    try {
+      const s = normalizeServer(input);
+      if (s.protocol === 'masque') return { noLink: 'MASQUE_NO_LINK' };
+      return { link: toLink(s) };
+    } catch (e) { return { error: cleanText(e.message, 200) }; }
   });
   handle('qr:make', (text) => QRCode.toDataURL(String(text || '').slice(0, 4096), { margin: 2, width: 320, errorCorrectionLevel: 'M' }));
   handle('sys:readConfigFile', async () => {

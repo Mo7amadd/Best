@@ -5,12 +5,12 @@
 
 const {
   cleanText, safeDecodeURIComponent, decodeComponent, b64decode, b64encode,
-  parsePort, parseHost, randomId, splitList, boolish, unsafeXrayJson,
+  parsePort, parseHost, randomId, splitList, boolish, isIPv6, unsafeXrayJson,
 } = require('./util');
 
 const MAX_LINK_LENGTH = 16384;
 
-const PROTOCOLS = ['vmess', 'vless', 'trojan', 'shadowsocks', 'socks', 'http', 'hysteria2', 'hysteria', 'tuic', 'wireguard', 'anytls', 'naive'];
+const PROTOCOLS = ['vmess', 'vless', 'trojan', 'shadowsocks', 'socks', 'http', 'hysteria2', 'hysteria', 'tuic', 'wireguard', 'anytls', 'naive', 'masque'];
 const NETWORKS = ['raw', 'ws', 'grpc', 'httpupgrade', 'xhttp', 'kcp', 'h2', 'quic'];
 const SS_PLUGINS = ['obfs-local', 'v2ray-plugin'];
 const SS_METHODS = [
@@ -106,6 +106,68 @@ const HOP_PORTS = /^\d{1,5}(-\d{1,5})?(,\d{1,5}(-\d{1,5})?)*$/;
 function matchText(v, re, max) {
   const s = cleanText(v, max);
   return s && re.test(s) ? s : '';
+}
+
+// ---- MASQUE (Xray 26.11+): CONNECT-IP over HTTP/3 or HTTP/2. No share-link format exists.
+const MASQUE_DEFAULT_PATH = '/.well-known/masque/ip/{target}/{ipproto}/';
+const MASQUE_WARP_SNI = 'consumer-masque.cloudflareclient.com';
+const IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+const isIp = (x) => IPV4.test(x) || (x.includes(':') && isIPv6(x));
+const isIpOrPrefix = (x) => {
+  const m = /^([^/]+)(?:\/(\d{1,3}))?$/.exec(x);
+  if (!m || !isIp(m[1])) return false;
+  return m[2] === undefined || Number(m[2]) <= (m[1].includes(':') ? 128 : 32);
+};
+
+/** The request path as Xray takes it: starts with "/", only the {target} / {ipproto} variables. */
+function masquePath(v) {
+  const p = cleanText(v, 1024);
+  if (!p) return '';
+  const rest = p.replace(/\{\?target,ipproto\}|\{\?ipproto,target\}|\{&target,ipproto\}|\{&ipproto,target\}|\{target\}|\{ipproto\}/g, '');
+  if (!p.startsWith('/') || /[{}\s"\\]/.test(rest)) throw new Error('MASQUE: the path must start with "/" and may only use {target} and {ipproto}');
+  return p;
+}
+
+/** A WARP key as PEM or base64 DER → one line of base64 (what Xray reads; PEM bodies are base64 DER). */
+function warpKey(v) {
+  const raw = String(v === undefined || v === null ? '' : v).slice(0, 4096);
+  const b64 = raw.replace(/-----(BEGIN|END)[A-Z0-9 ]{1,40}-----/g, '').replace(/\s+/g, '');
+  if (!b64) return '';
+  if (!/^[A-Za-z0-9+/]{40,2048}={0,2}$/.test(b64)) throw new Error('MASQUE: a WARP key must be PEM or base64');
+  return b64;
+}
+
+/** A list from an array or comma / new-line separated text. */
+const listOf = (v, max) => (Array.isArray(v) ? v : String(v === undefined || v === null ? '' : v).split(/[,\n]/)).map((x) => cleanText(x, 64)).filter(Boolean).slice(0, max);
+
+function normalizeMasque(s, input) {
+  const path = masquePath(input.path);
+  if (path) s.path = path;
+  const host = cleanText(input.host, 260);
+  if (host) {
+    if (!/^(\[[0-9a-f:.]+\]|[A-Za-z0-9.-]+)(:\d{1,5})?$/i.test(host)) throw new Error('MASQUE: invalid host');
+    s.host = host;
+  }
+  const dns = listOf(input.remoteDns, 4);
+  if (dns.some((x) => !isIp(x))) throw new Error('MASQUE: remote DNS takes IP addresses only');
+  if (dns.length) s.remoteDns = dns;
+  const priv = warpKey(input.warpPrivateKey);
+  if (priv) {
+    // WARP: Cloudflare's endpoint, signed in with an enrolled key instead of a user name / password.
+    s.warpPrivateKey = priv;
+    s.warpPublicKey = warpKey(input.warpPublicKey);
+    const addr = listOf(input.warpAddress, 2);
+    if (!s.warpPublicKey || !addr.length) throw new Error('MASQUE: WARP needs the private key, the endpoint public key and the tunnel addresses');
+    if (addr.some((x) => !isIpOrPrefix(x)) || addr.filter((x) => x.includes(':')).length > 1 || addr.filter((x) => !x.includes(':')).length > 1) {
+      throw new Error('MASQUE: WARP takes at most one IPv4 and one IPv6 tunnel address');
+    }
+    s.warpAddress = addr;
+    delete s.username;
+    delete s.password;
+    if (!s.sni) s.sni = MASQUE_WARP_SNI;
+    return;
+  }
+  if (s.username && s.username.includes(':')) throw new Error('MASQUE: the user name cannot contain ":"');
 }
 
 /** A JSON object given as text (e.g. fm=… finalmask). Returns compact JSON or ''. */
@@ -567,9 +629,9 @@ function normalizeServer(input) {
     str('uuid', 128);
     if (!s.uuid) throw new Error('missing id');
   }
-  if (['trojan', 'shadowsocks', 'hysteria2', 'hysteria', 'tuic', 'socks', 'http', 'anytls', 'naive'].includes(protocol)) str('password', 256);
+  if (['trojan', 'shadowsocks', 'hysteria2', 'hysteria', 'tuic', 'socks', 'http', 'anytls', 'naive', 'masque'].includes(protocol)) str('password', 256);
   if (['trojan', 'shadowsocks', 'anytls'].includes(protocol) && !s.password) throw new Error('missing password');
-  if (['socks', 'http', 'naive'].includes(protocol)) str('username', 128);
+  if (['socks', 'http', 'naive', 'masque'].includes(protocol)) str('username', 128);
   if (protocol === 'vmess') { s.cipher = pick(VMESS_CIPHERS, input.cipher, 'auto'); num('alterId', 0, 65535); }
   if (protocol === 'shadowsocks') {
     s.cipher = pick(SS_METHODS, input.cipher, '');
@@ -600,7 +662,7 @@ function normalizeServer(input) {
     }
     const tls = normTls(input.tls);
     if (tls && (usesStream || (protocol === 'http' && tls === 'tls'))) s.tls = tls;
-  } else if (['hysteria2', 'hysteria', 'tuic', 'anytls', 'naive'].includes(protocol)) {
+  } else if (['hysteria2', 'hysteria', 'tuic', 'anytls', 'naive', 'masque'].includes(protocol)) {
     s.tls = 'tls';
   }
   if (s.tls) {
@@ -655,6 +717,7 @@ function normalizeServer(input) {
     if (r.length === 3) s.reserved = r;
     num('mtu', 576, 9000);
   }
+  if (protocol === 'masque') normalizeMasque(s, input);
   // Proxy chain: reach this server through another one (its id).
   if (/^[a-f0-9]{6,32}$/.test(input.via || '') && input.via !== s.id) s.via = input.via;
   // Keep runtime test results when re-normalizing stored servers.
@@ -708,7 +771,8 @@ function toLink(server) {
   const s = normalizeServer(server);
   if (s.protocol === 'custom') throw new Error('CUSTOM_NO_LINK');
   if (s.protocol === 'group') throw new Error('GROUP_NO_LINK');
-  const name = '#' + encodeURIComponent(s.remark || s.address);
+  if (s.protocol === 'masque') throw new Error('MASQUE_NO_LINK');
+  const name ='#' + encodeURIComponent(s.remark || s.address);
   switch (s.protocol) {
     case 'vless':
       return `vless://${encodeURIComponent(s.uuid)}@${hostPart(s)}${q({ encryption: s.encryption || 'none', flow: s.flow, ...streamParams(s) })}${name}`;
@@ -805,6 +869,7 @@ function transportLabel(s) {
   if (s.protocol === 'wireguard') return 'UDP';
   if (s.protocol === 'naive') return s.network === 'quic' ? 'QUIC' : 'HTTPS';
   if (s.protocol === 'anytls') return 'TCP + TLS';
+  if (s.protocol === 'masque') return `${s.warpPrivateKey ? 'WARP · ' : ''}${(s.alpn || []).length === 1 && s.alpn[0] === 'h2' ? 'HTTP/2' : 'HTTP/3'}`;
   if (s.protocol === 'shadowsocks' && s.plugin) return s.plugin === 'v2ray-plugin' ? 'v2ray-plugin' : 'obfs';
   if (['shadowsocks', 'socks', 'http'].includes(s.protocol) && !s.network) return s.tls ? 'TCP + TLS' : 'TCP';
   const net = (s.network || 'raw') === 'raw' ? 'TCP' : s.network === 'httpupgrade' ? 'HTTPUpgrade' : s.network === 'kcp' ? 'mKCP' : s.network.toUpperCase();

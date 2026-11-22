@@ -18,7 +18,7 @@ const asList = (v) => (Array.isArray(v) ? v : v === undefined || v === null ? []
 
 // Only outbound kinds that just carry traffic to a server. Everything else is dropped — e.g.
 // sing-box "tor" (starts a program from executable_path), "ssh" (reads key files), Xray "loopback".
-const XRAY_OUT = ['freedom', 'blackhole', 'dns', 'vless', 'vmess', 'trojan', 'shadowsocks', 'socks', 'http', 'wireguard', 'hysteria'];
+const XRAY_OUT = ['freedom', 'blackhole', 'dns', 'vless', 'vmess', 'trojan', 'shadowsocks', 'socks', 'http', 'wireguard', 'hysteria', 'masque'];
 const SB_OUT = ['direct', 'block', 'dns', 'selector', 'urltest', 'socks', 'http', 'shadowsocks', 'vmess', 'trojan', 'naive', 'wireguard', 'hysteria', 'shadowtls', 'vless', 'tuic', 'hysteria2', 'anytls'];
 const SB_ENDPOINTS = ['wireguard'];
 

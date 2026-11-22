@@ -432,11 +432,12 @@ function rowMenu(at, s) {
   const many = ui.selected.size > 1;
   const ids = selectedIds();
   const custom = s.protocol === 'custom';
+  const noLink = custom || s.protocol === 'masque'; // no share-link format
   showMenu(at, [
     !many && { label: t('m_connect'), icon: 'power', onClick: () => useServer(s.id) },
     !many && { label: t('m_edit'), icon: 'edit', onClick: () => openEditor(s.id) },
-    !many && !custom && { label: t('m_share'), icon: 'qr', onClick: () => shareServer(s.id) },
-    !custom && { label: t('m_copyLink'), icon: 'copy', onClick: async () => { const n = await run(() => api.copyLinks(ids)); toast(t('t_linksCopied', { n: num(n || 0) }), 'success'); } },
+    !many && !noLink && { label: t('m_share'), icon: 'qr', onClick: () => shareServer(s.id) },
+    !noLink && { label: t('m_copyLink'), icon: 'copy', onClick: async () => { const n = await run(() => api.copyLinks(ids)); toast(t('t_linksCopied', { n: num(n || 0) }), 'success'); } },
     !many && { label: t('m_duplicate'), icon: 'copy', onClick: () => run(() => api.duplicateServer(s.id)) },
     'sep',
     { label: t('m_testReal'), icon: 'bolt', onClick: () => startTest(ids, 'real') },

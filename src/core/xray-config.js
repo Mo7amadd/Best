@@ -2,7 +2,7 @@
 const { checkSs2022Key } = require('./util');
 // Build Xray-core JSON configs from normalized servers + settings + routing.
 
-const XRAY_PROTOCOLS = ['vmess', 'vless', 'trojan', 'shadowsocks', 'socks', 'http', 'wireguard'];
+const XRAY_PROTOCOLS = ['vmess', 'vless', 'trojan', 'shadowsocks', 'socks', 'http', 'wireguard', 'masque'];
 
 const { xrayCountryRules, securityBlockRules } = require('./country');
 
@@ -85,6 +85,30 @@ function hysteriaOutbound(s, tag) {
   const ss = { network: 'hysteria', security: 'tls', tlsSettings: tls, hysteriaSettings: { version: 2, auth: s.password || '' } };
   applyFinalMask(ss, s, udp.length ? { udp } : null);
   return { tag, protocol: 'hysteria', settings: { version: 2, address: s.address, port: s.port }, streamSettings: ss };
+}
+
+/**
+ * MASQUE through Xray 26.11+ (the same shape 3x-ui puts in its JSON subscriptions): HTTP/3, or
+ * HTTP/2 over TCP when the ALPN is only "h2". Domain names are resolved inside the tunnel.
+ */
+function masqueOutbound(s, tag) {
+  const tls = { serverName: s.sni || s.address, fingerprint: s.fingerprint || 'chrome' };
+  if (s.alpn && s.alpn.length) tls.alpn = s.alpn;
+  applyTlsExtras(tls, s);
+  const ms = {};
+  if (s.host) ms.host = s.host;
+  if (s.path) ms.path = s.path;
+  if (s.warpPrivateKey) {
+    ms.warp = { privateKey: s.warpPrivateKey, publicKey: s.warpPublicKey, address: s.warpAddress };
+  } else if (s.username || s.password) {
+    ms.user = s.username || '';
+    ms.pass = s.password || '';
+  }
+  const settings = { address: s.address, port: s.port };
+  if (s.remoteDns && s.remoteDns.length) settings.remoteDNS = s.remoteDns;
+  const ss = { network: 'masque', security: 'tls', tlsSettings: tls, masqueSettings: ms };
+  applyFinalMask(ss, s);
+  return { tag, protocol: 'masque', settings, streamSettings: ss };
 }
 
 function streamSettings(s, settings) {
@@ -172,6 +196,7 @@ function outboundSettings(s) {
 function proxyOutbound(s, settings, tag = 'proxy') {
   checkSs2022Key(s);
   if (s.protocol === 'hysteria2') return hysteriaOutbound(s, tag);
+  if (s.protocol === 'masque') return masqueOutbound(s, tag);
   const ob = { tag, protocol: s.protocol, settings: outboundSettings(s) };
   const ss = streamSettings(s, settings);
   if (ss) ob.streamSettings = ss;

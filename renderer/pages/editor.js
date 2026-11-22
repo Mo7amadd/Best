@@ -9,7 +9,7 @@ import { S, api, run, serverName } from '../app.js';
 const PROTOCOLS = [
   ['vless', 'VLESS'], ['vmess', 'VMess'], ['trojan', 'Trojan'], ['shadowsocks', 'Shadowsocks'],
   ['hysteria2', 'Hysteria2'], ['tuic', 'TUIC'], ['wireguard', 'WireGuard'], ['anytls', 'AnyTLS'],
-  ['naive', 'Naive'], ['hysteria', 'Hysteria'], ['socks', 'SOCKS'], ['http', 'HTTP'], ['custom', 'JSON'], ['group', 'Group'],
+  ['naive', 'Naive'], ['masque', 'MASQUE'], ['hysteria', 'Hysteria'], ['socks', 'SOCKS'], ['http', 'HTTP'], ['custom', 'JSON'], ['group', 'Group'],
 ];
 const GROUP_STRATEGIES = ['leastPing', 'random', 'roundRobin', 'leastLoad'];
 const NETWORKS = [['raw', 'TCP'], ['ws', 'WS'], ['grpc', 'gRPC'], ['httpupgrade', 'HTTPUpgrade'], ['xhttp', 'XHTTP'], ['kcp', 'mKCP'], ['h2', 'H2'], ['quic', 'QUIC']];
@@ -17,7 +17,8 @@ const SS_METHODS = ['aes-128-gcm', 'aes-256-gcm', 'chacha20-ietf-poly1305', 'xch
 const VMESS_CIPHERS = ['auto', 'aes-128-gcm', 'chacha20-poly1305', 'none', 'zero'];
 const FINGERPRINTS = ['', 'chrome', 'firefox', 'safari', 'ios', 'android', 'edge', '360', 'qq', 'random', 'randomized'];
 const STREAM = ['vmess', 'vless', 'trojan'];
-const OWN_TLS = ['hysteria2', 'hysteria', 'tuic', 'anytls', 'naive'];
+const OWN_TLS = ['hysteria2', 'hysteria', 'tuic', 'anytls', 'naive', 'masque'];
+const MASQUE_PATH = '/.well-known/masque/ip/{target}/{ipproto}/';
 const HIDDEN_KEYS = ['id', 'delay', 'speed', 'udp', 'usageUp', 'usageDown', 'subId'];
 
 function blank(protocol) {
@@ -34,6 +35,7 @@ function blank(protocol) {
   if (protocol === 'wireguard') return { ...base, port: 2408, privateKey: '', peerPublicKey: '', localAddress: ['10.0.0.2/32'], mtu: 1280 };
   if (protocol === 'anytls') return { ...base, password: '', fingerprint: 'chrome' };
   if (protocol === 'naive') return { ...base, username: '', password: '' };
+  if (protocol === 'masque') return { ...base, username: '', password: '', alpn: ['h3'] };
   if (protocol === 'group') return { protocol, remark: '', strategy: 'leastPing', members: [], memberSub: '' };
   if (protocol === 'custom') {
     return { protocol, remark: '', core: 'xray', config: JSON.stringify({ log: { loglevel: 'warning' }, inbounds: [{ tag: 'socks-in', protocol: 'socks', listen: '127.0.0.1', port: S.settings.socksPort, settings: { udp: true } }], outbounds: [] }, null, 2) };
@@ -99,7 +101,37 @@ export async function openEditor(id, preset) {
         field(t('f_mtu'), text('mtu', { type: 'number' })));
     }
     if (p === 'naive') rows.push(h('div', { class: 'field full' }, sw('__quic', t('f_quic'))));
+    if (p === 'masque') return masqueAuth();
     return rows.length ? section(2, t('ed_auth'), h('div', { class: 'grid2' }, rows)) : null;
+  }
+
+  /** MASQUE: a user name / password (3x-ui: the client's email and password) or a WARP registration. */
+  function masqueAuth() {
+    const warp = Boolean(draft.__warp);
+    const rows = warp
+      ? [
+        field(t('f_warpPrivateKey'), keyArea('warpPrivateKey', '-----BEGIN PRIVATE KEY-----'), { full: true }),
+        field(t('f_warpPublicKey'), keyArea('warpPublicKey', '-----BEGIN PUBLIC KEY-----'), { full: true }),
+        field(t('f_warpAddress'), text('warpAddress', { list: true, placeholder: '172.16.0.2, 2606:4700:110:8a36::2' }), { full: true }),
+      ]
+      : [field(t('f_username'), text('username')), field(t('f_password'), text('password'))];
+    rows.push(
+      field(t('f_path'), text('path', { placeholder: MASQUE_PATH }), { full: true }),
+      field(t('f_host'), text('host', { placeholder: draft.address || '' })),
+      field(t('f_remoteDns'), text('remoteDns', { list: true, placeholder: '1.1.1.1, 2606:4700:4700::1111' }), { help: t('f_remoteDns_help') }));
+    return section(2, t('ed_auth'),
+      h('div', { class: 'note' }, icon('info', 16), h('span', null, t('masque_help'))),
+      h('div', { class: 'switch-row' },
+        h('div', { class: 'txt' }, h('span', null, t('f_warp')), h('span', { class: 'dim' }, t('f_warp_help'))),
+        toggle(warp, (v) => { draft.__warp = v; refreshPreview(); renderBody(); }, { label: t('f_warp') })),
+      h('div', { class: 'grid2' }, rows));
+  }
+
+  /** A multi-line key (PEM), kept as typed; the main process turns it into one line of base64. */
+  function keyArea(k, placeholder) {
+    const ta = h('textarea', { class: 'input mono', rows: 3, dir: 'ltr', spellcheck: 'false', placeholder, onInput: (e) => set(k, e.target.value) });
+    ta.value = draft[k] || '';
+    return ta;
   }
 
   function transportSection() {
@@ -133,7 +165,7 @@ export async function openEditor(id, preset) {
     const rows = [];
     if (tls) {
       rows.push(field(t('f_sni'), text('sni', { placeholder: draft.address || '' })));
-      if (tls === 'tls' && p !== 'naive') rows.push(field(t('f_alpn'), text('alpn', { list: true, placeholder: 'h2,http/1.1' })));
+      if (tls === 'tls' && p !== 'naive') rows.push(field(t('f_alpn'), text('alpn', { list: true, placeholder: p === 'masque' ? 'h3' : 'h2,http/1.1' })));
       if (!['hysteria2', 'hysteria', 'tuic', 'naive'].includes(p)) rows.push(field(t('f_fingerprint'), pick('fingerprint', FINGERPRINTS)));
       if (tls === 'reality') {
         rows.push(field(t('f_publicKey'), text('publicKey'), { full: true }), field(t('f_shortId'), text('shortId')), field(t('f_spiderX'), text('spiderX', { placeholder: '/' })));
@@ -250,7 +282,8 @@ export async function openEditor(id, preset) {
     const copy = { ...draft };
     for (const k of HIDDEN_KEYS) delete copy[k];
     delete copy.__quic;
-    jsonText = JSON.stringify(copy, null, 2);
+    delete copy.__warp;
+    jsonText =JSON.stringify(copy, null, 2);
     const ta = h('textarea', { class: 'input json-area', spellcheck: 'false', onInput: (e) => { jsonText = e.target.value; tryJson(false); } });
     ta.value = jsonText;
     return [
@@ -277,6 +310,7 @@ export async function openEditor(id, preset) {
   function renderBody() {
     // Worked out once per server (not on every redraw, which would undo the QUIC switch).
     if (draft.protocol === 'naive' && draft.__quic === undefined) draft.__quic = draft.network === 'quic';
+    if (draft.protocol === 'masque' && draft.__warp === undefined) draft.__warp = Boolean(draft.warpPrivateKey);
     const custom = draft.protocol === 'custom';
     const group = draft.protocol === 'group';
     const parts = [protocolPicker()];
@@ -314,7 +348,13 @@ export async function openEditor(id, preset) {
   function outgoing() {
     const o = { ...draft };
     if (o.protocol === 'naive') { o.network = o.__quic ? 'quic' : ''; }
+    if (o.protocol === 'masque') {
+      // Only the chosen way of signing in is sent: WARP keys or a user name / password.
+      const drop = o.__warp ? ['username', 'password'] : ['warpPrivateKey', 'warpPublicKey', 'warpAddress'];
+      for (const k of drop) delete o[k];
+    }
     delete o.__quic;
+    delete o.__warp;
     return o;
   }
 
@@ -328,6 +368,11 @@ export async function openEditor(id, preset) {
     try { r = await api.previewServer(outgoing()); } catch (e) { r = { error: cleanErr(e) }; }
     if (r.error) {
       preview.replaceChildren(h('span', { class: 'section-label' }, t('ed_linkPreview')), h('div', { class: 'ed-error' }, icon('alert', 14), h('span', null, r.error)));
+      return;
+    }
+    if (r.noLink) {
+      // Valid, but the protocol has no share-link format (MASQUE).
+      preview.replaceChildren(h('span', { class: 'section-label' }, t('ed_linkPreview')), h('div', { class: 'dim' }, t(r.noLink)));
       return;
     }
     preview.replaceChildren(

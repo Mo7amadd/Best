@@ -4,6 +4,11 @@
 import { MAC } from './i18n-mac.js';
 
 const fa = {
+  // MASQUE
+  MASQUE_NO_LINK: 'MASQUE هنوز قالب لینک اشتراک‌گذاری ندارد.', f_remoteDns: 'DNS داخل تونل', f_remoteDns_help: 'IP سرورهای DNS که اسم سایت‌ها داخل تونل از آن‌ها پرسیده می‌شود. خالی = کلودفلر (1.1.1.1).',
+  f_warp: 'WARP کلودفلر', f_warp_help: 'به‌جای سرور خودتان به WARP کلودفلر از راه MASQUE وصل می‌شود. کلیدها و نشانی‌ها از ثبت WARP برای MASQUE می‌آیند (مثلاً پنل 3x-ui: Xray ← خروجی‌ها ← WARP).',
+  f_warpPrivateKey: 'کلید خصوصی WARP', f_warpPublicKey: 'کلید عمومی سرور WARP', f_warpAddress: 'نشانی‌های تونل WARP',
+  masque_help: 'MASQUE فقط با Xray اجرا می‌شود. برای پنل 3x-ui: نام کاربری = ایمیل کاربر و رمز = رمز همان کاربر؛ یا اشتراک JSON پنل را اضافه کنید. ALPN خالی یا h3 یعنی HTTP/3 (UDP)، فقط h2 یعنی HTTP/2 (TCP).',
   appName: 'Best',
   nav_servers: 'سرورها', nav_subs: 'اشتراک‌ها', nav_routing: 'قوانین مسیریابی', nav_logs: 'لاگ‌ها', nav_updates: 'به‌روزرسانی', nav_settings: 'تنظیمات',
   upd_help: 'هسته‌ها و فایل‌های جغرافیایی را از مخزن رسمی‌شان به‌روز کنید. هر فایل قبل از نصب با هش رسمی بررسی می‌شود.',
@@ -169,6 +174,11 @@ const fa = {
 };
 
 const en = {
+  // MASQUE
+  MASQUE_NO_LINK: 'MASQUE has no share-link format yet.', f_remoteDns: 'DNS inside the tunnel', f_remoteDns_help: 'IPs of the DNS servers asked for site names inside the tunnel. Empty = Cloudflare (1.1.1.1).',
+  f_warp: 'Cloudflare WARP', f_warp_help: 'Connects to Cloudflare WARP over MASQUE instead of your own server. The keys and addresses come from a WARP registration enrolled for MASQUE (e.g. 3x-ui panel: Xray → Outbounds → WARP).',
+  f_warpPrivateKey: 'WARP private key', f_warpPublicKey: 'WARP endpoint public key', f_warpAddress: 'WARP tunnel addresses',
+  masque_help: 'MASQUE runs on Xray only. For a 3x-ui panel: user name = the client’s email, password = that client’s password; or add the panel’s JSON subscription. ALPN empty or h3 means HTTP/3 (UDP), only h2 means HTTP/2 (TCP).',
   appName: 'Best',
   nav_servers: 'Servers', nav_subs: 'Subscriptions', nav_routing: 'Routing rules', nav_logs: 'Logs', nav_updates: 'Updates', nav_settings: 'Settings',
   upd_help: 'Update the cores and geo data from their official repositories. Every file is checked against its published hash before it is installed.',
@@ -325,6 +335,11 @@ const en = {
 };
 
 const ru = {
+  // MASQUE
+  MASQUE_NO_LINK: 'У MASQUE пока нет формата ссылки.', f_remoteDns: 'DNS внутри туннеля', f_remoteDns_help: 'IP DNS-серверов, у которых имена сайтов запрашиваются внутри туннеля. Пусто — Cloudflare (1.1.1.1).',
+  f_warp: 'Cloudflare WARP', f_warp_help: 'Подключение к Cloudflare WARP через MASQUE вместо своего сервера. Ключи и адреса берутся из регистрации WARP для MASQUE (например, панель 3x-ui: Xray → Outbounds → WARP).',
+  f_warpPrivateKey: 'Закрытый ключ WARP', f_warpPublicKey: 'Открытый ключ сервера WARP', f_warpAddress: 'Адреса туннеля WARP',
+  masque_help: 'MASQUE работает только в Xray. Для панели 3x-ui: имя пользователя = email клиента, пароль = пароль этого клиента; или добавьте JSON-подписку панели. ALPN пусто или h3 — HTTP/3 (UDP), только h2 — HTTP/2 (TCP).',
   appName: 'Best',
   nav_servers: 'Серверы', nav_subs: 'Подписки', nav_routing: 'Правила маршрутизации', nav_logs: 'Журнал', nav_updates: 'Обновления', nav_settings: 'Настройки',
   upd_help: 'Обновление ядер и геоданных из официальных репозиториев. Перед установкой каждый файл сверяется с опубликованным хешем.',
@@ -481,6 +496,16 @@ const ru = {
 };
 
 const zh = {
+  // MASQUE
+  MASQUE_NO_LINK: 'MASQUE 还没有分享链接格式。',
+  f_remoteDns: '隧道内 DNS',
+  f_remoteDns_help: '在隧道内查询网站名称所用的 DNS 服务器 IP。留空 = Cloudflare (1.1.1.1)。',
+  f_warp: 'Cloudflare WARP',
+  f_warp_help: '通过 MASQUE 连接 Cloudflare WARP，而不是你自己的服务器。密钥和地址来自为 MASQUE 注册的 WARP（例如 3x-ui 面板：Xray → 出站 → WARP）。',
+  f_warpPrivateKey: 'WARP 私钥',
+  f_warpPublicKey: 'WARP 服务器公钥',
+  f_warpAddress: 'WARP 隧道地址',
+  masque_help: 'MASQUE 只在 Xray 上运行。3x-ui 面板：用户名 = 客户端的邮箱，密码 = 该客户端的密码；或添加面板的 JSON 订阅。ALPN 留空或 h3 表示 HTTP/3 (UDP)，只有 h2 表示 HTTP/2 (TCP)。',
   appName: 'Best',
   nav_servers: '服务器',
   nav_subs: '订阅',

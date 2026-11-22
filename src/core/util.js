@@ -172,5 +172,5 @@ function unsafeXrayJson(v, { files = false } = {}, depth = 0) {
 module.exports = {
   unsafeXrayJson,
   cleanText, safeDecodeURIComponent, decodeComponent, looksLikeBase64, b64decode, b64encode,
-  parsePort, parseHost, randomId, splitList, boolish, checkSs2022Key,
+  parsePort, parseHost, randomId, splitList, boolish, checkSs2022Key, isIPv6,
 };

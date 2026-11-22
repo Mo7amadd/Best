@@ -883,6 +883,53 @@ try {
     assert(!(await ev(`Boolean(document.querySelector('.overlay, .drawer'))`)), 'editor did not close');
   });
 
+  await check('server editor: a MASQUE server is filled with the keyboard, WARP switches the sign-in fields, it saves without a share link', async () => {
+    const T = (k) => ev(`import(new URL('i18n.js', document.baseURI).href).then((m) => m.t(${JSON.stringify(k)}))`);
+    const [lAddr, lUser, lPass, lRemark, noLink, lWarp, lWarpKey, lSave, lShare, lCopy] = await Promise.all(['f_address', 'f_username', 'f_password', 'f_remark', 'MASQUE_NO_LINK', 'f_warp', 'f_warpPrivateKey', 'save', 'm_share', 'm_copyLink'].map(T));
+    const fieldInput = (label) => ev(`(() => { const f = [...document.querySelectorAll('.drawer .field')].find((x) => x.querySelector('.field-label')?.textContent === ${JSON.stringify(label)}); const i = f && f.querySelector('input, textarea'); if (!i) return null; i.scrollIntoView({ block: 'center' }); const r = i.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+    const typeInto = async (label, text) => { const p = await fieldInput(label); assert(p, `no field ${label}`); await click(p[0], p[1]); await wait(80); await send('Input.insertText', { text }); await wait(120); };
+    await ev(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN', key: 'n', ${CMD_PROP}: true, bubbles: true }))`); await wait(500);
+    const idx = await ev(`[...document.querySelectorAll('.drawer .ed-proto')].findIndex((b) => b.textContent === 'MASQUE')`);
+    assert(idx >= 0, 'no MASQUE button');
+    const pb = await ev(`window.__pt('.drawer .ed-proto', ${idx})`);
+    await click(pb[0], pb[1]); await wait(300);
+    assert((await ev(`document.querySelector('.drawer .ed-proto[aria-pressed="true"]')?.textContent`)) === 'MASQUE', 'MASQUE not chosen');
+    await typeInto(lRemark, 'masque-ui');
+    await typeInto(lAddr, 'example.com');
+    await typeInto(lUser, 'best-user');
+    await typeInto(lPass, 'secret-pass');
+    await wait(500);
+    assert((await ev(`document.querySelector('.drawer .ed-preview')?.textContent || ''`)).includes(noLink), 'preview should say there is no share link');
+    // WARP on: key boxes instead of user name / password; off again: back.
+    const sw = await ev(`(() => { const r = [...document.querySelectorAll('.drawer .switch-row')].find((x) => x.textContent.includes(${JSON.stringify(lWarp)})); const b = r && r.querySelector('.switch'); if (!b) return null; b.scrollIntoView({ block: 'center' }); const q = b.getBoundingClientRect(); return [Math.round(q.left + q.width / 2), Math.round(q.top + q.height / 2)]; })()`);
+    assert(sw, 'no WARP switch');
+    await click(sw[0], sw[1]); await wait(300);
+    assert(await fieldInput(lWarpKey), 'WARP key box missing');
+    assert(!(await fieldInput(lUser)), 'user name still shown with WARP');
+    const sw2 = await ev(`(() => { const b = [...document.querySelectorAll('.drawer .switch-row')].find((x) => x.textContent.includes(${JSON.stringify(lWarp)})).querySelector('.switch'); const q = b.getBoundingClientRect(); return [Math.round(q.left + q.width / 2), Math.round(q.top + q.height / 2)]; })()`);
+    await click(sw2[0], sw2[1]); await wait(300);
+    assert(await fieldInput(lUser), 'user name did not come back');
+    assert((await ev(`document.querySelector('.drawer [aria-checked]') && [...document.querySelectorAll('.drawer .field input')].some((i) => i.value === 'best-user')`)), 'typed user name lost');
+    const save = await ev(`(() => { const b = [...document.querySelectorAll('.drawer button')].find((x) => x.textContent.trim() === ${JSON.stringify(lSave)}); const q = b.getBoundingClientRect(); return [Math.round(q.left + q.width / 2), Math.round(q.top + q.height / 2)]; })()`);
+    await click(save[0], save[1]); await wait(700);
+    assert(!(await ev(`Boolean(document.querySelector('.drawer'))`)), 'editor did not close after saving');
+    // The list never carries credentials; the full server is asked for on its own (as the editor does).
+    const saved = await ev(`best.getState().then((s) => s.servers.find((x) => x.remark === 'masque-ui')).then((x) => x && best.getServer(x.id))`);
+    assert(saved && saved.protocol === 'masque' && saved.username === 'best-user' && saved.password === 'secret-pass' && saved.tls === 'tls' && !saved.warpPrivateKey, 'saved server is wrong: ' + JSON.stringify(saved && { p: saved.protocol, u: saved.username, tls: saved.tls, warp: Boolean(saved.warpPrivateKey) }));
+    // Its row menu has no share / copy-link entries.
+    const row = await ev(`(() => { const r = document.querySelector('.srow[data-id="${saved.id}"]'); if (!r) return null; r.scrollIntoView({ block: 'center' }); const q = r.getBoundingClientRect(); return [Math.round(q.left + 40), Math.round(q.top + q.height / 2)]; })()`);
+    assert(row, 'MASQUE row not in the list');
+    await move(row[0], row[1], 3);
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: row[0], y: row[1], button: 'right', clickCount: 1 });
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: row[0], y: row[1], button: 'right', clickCount: 1 });
+    await wait(300);
+    const items = await ev(`[...document.querySelectorAll('.menu .menu-item')].map((b) => b.textContent.trim())`);
+    await ev(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`); await wait(200);
+    assert(items.length > 3, 'row menu did not open');
+    assert(!items.some((x) => x.includes(lShare) || x.includes(lCopy)), 'MASQUE row offers a share link: ' + items.join(', '));
+    await ev(`best.removeServers([${JSON.stringify(saved.id)}])`); await wait(300);
+  });
+
   // ------------------------------------------------------------ connection
   await check('Disconnect stops the core (connection card)', async () => {
     await ev(`best.importText('vless://b831381d-6324-4d53-ad4f-8cda48b30811@127.0.0.1:9?security=none&type=tcp#ui-test')`);
