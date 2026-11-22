@@ -4,7 +4,7 @@
 // before it can reach a core config.
 
 const {
-  cleanText, safeDecodeURIComponent, decodeComponent, b64decode, b64encode,
+  cleanText, safeDecodeURIComponent, decodeComponent, b64decode, b64encode, looksLikeBase64,
   parsePort, parseHost, randomId, splitList, boolish, isIPv6, unsafeXrayJson,
 } = require('./util');
 
@@ -446,6 +446,28 @@ function parseNaive(u, quic) {
   };
 }
 
+/**
+ * The old SOCKS link base64-encodes everything: socks://base64([user:pass@]host:port)#name. It
+ * has no ":port" of its own (and the base64 may hold "/", "+" or "="), so it is turned into the
+ * plain form first; any other link is returned as it is.
+ */
+function legacySocks(link) {
+  const m = /^socks5?:\/\/([^#?]*)(#.*)?$/i.exec(link);
+  if (!m || !m[1] || m[1].includes(':') || !looksLikeBase64(m[1])) return link;
+  let d;
+  try { d = b64decode(m[1]); } catch { return link; }
+  const at = d.lastIndexOf('@');
+  const hostPort = at >= 0 ? d.slice(at + 1) : d;
+  if (!/^(\[[0-9a-f:.]+\]|[^\s:/@?#[\]]+):\d{1,5}$/i.test(hostPort)) return link;
+  let info = '';
+  if (at >= 0) {
+    const cred = d.slice(0, at);
+    const ci = cred.indexOf(':');
+    info = `${encodeURIComponent(ci >= 0 ? cred.slice(0, ci) : cred)}:${encodeURIComponent(ci >= 0 ? cred.slice(ci + 1) : '')}@`;
+  }
+  return `socks://${info}${hostPort}${m[2] || ''}`;
+}
+
 function parseSocks(u) {
   let user = '';
   let pass = '';
@@ -488,6 +510,8 @@ function parseHysteria2(u) {
       ? `${intIn(p.minPacketSize, 1, 65535)}-${intIn(p.maxPacketSize, 1, 65535)}` : '',
     pcs: matchText(p.pinSHA256, PIN_LIST, 2048),
     hopPorts: matchText(p.mport, HOP_PORTS, 256),
+    // Not in the Hysteria2 URI spec; some clients add it (seconds, or a range "5-15").
+    hopInterval: p.hopInterval || p.hop_interval || p.mportHopInt || undefined,
     ech: matchText(p.ech, B64ISH, 8192),
     vcn: cleanText(p.vcn, 253),
     fingerprint: pick(FINGERPRINTS, p.fp, ''),
@@ -546,7 +570,7 @@ function parseLink(raw) {
     case 'vless': s = parseVless(splitUrl(link)); break;
     case 'trojan': s = parseTrojan(splitUrl(link)); break;
     case 'ss': s = parseShadowsocks(link); break;
-    case 'socks': case 'socks5': s = parseSocks(splitUrl(link)); break;
+    case 'socks': case 'socks5': s = parseSocks(splitUrl(legacySocks(link))); break;
     case 'hysteria2': case 'hy2': s = parseHysteria2(splitUrl(link)); break;
     case 'hysteria': s = parseHysteria(splitUrl(link)); break;
     case 'anytls': s = parseAnyTls(splitUrl(link)); break;
@@ -694,6 +718,11 @@ function normalizeServer(input) {
     if (['salamander', 'gecko'].includes(input.obfs)) { s.obfs = input.obfs; str('obfsPassword', 256); }
     if (s.obfs === 'gecko' && /^\d{1,5}-\d{1,5}$/.test(String(input.packetSize || ''))) s.packetSize = String(input.packetSize);
     const hop = matchText(input.hopPorts, HOP_PORTS, 256); if (hop) s.hopPorts = hop;
+    // How often to hop: seconds or a range "5-15" (both ends at least 5, as the cores require).
+    const hi = /^(\d{1,4})s?(?:-(\d{1,4})s?)?$/.exec(cleanText(input.hopInterval, 16));
+    if (s.hopPorts && hi && Number(hi[1]) >= 5 && (!hi[2] || Number(hi[2]) >= Number(hi[1]))) {
+      s.hopInterval = hi[2] && hi[2] !== hi[1] ? `${Number(hi[1])}-${Number(hi[2])}` : String(Number(hi[1]));
+    }
     num('upMbps', 0, 100000); num('downMbps', 0, 100000);
   }
   if (protocol === 'hysteria') {
@@ -822,7 +851,7 @@ function toLink(server) {
       return `hysteria2://${encodeURIComponent(s.password || '')}@${hostPart(s)}/${q({
         sni: s.sni, alpn: s.alpn, insecure: s.allowInsecure, obfs: s.obfs, 'obfs-password': s.obfsPassword,
         minPacketSize: s.packetSize ? s.packetSize.split('-')[0] : undefined, maxPacketSize: s.packetSize ? s.packetSize.split('-')[1] : undefined,
-        pinSHA256: s.pcs, mport: s.hopPorts, ech: s.ech, vcn: s.vcn, fp: s.fingerprint, fm: s.finalmask,
+        pinSHA256: s.pcs, mport: s.hopPorts, hopInterval: s.hopInterval, ech: s.ech, vcn: s.vcn, fp: s.fingerprint, fm: s.finalmask,
       })}${name}`;
     case 'tuic':
       return `tuic://${encodeURIComponent(s.uuid)}:${encodeURIComponent(s.password || '')}@${hostPart(s)}${q({

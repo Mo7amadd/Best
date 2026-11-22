@@ -81,7 +81,11 @@ function hysteriaOutbound(s, tag) {
     if (s.obfs === 'gecko' && s.packetSize) settings.packetSize = s.packetSize;
     udp.push({ type: 'salamander', settings });
   }
-  if (s.hopPorts) udp.push({ type: 'udphop', settings: { mode: 'intervalRemote', remotePorts: s.hopPorts } });
+  if (s.hopPorts) {
+    const hop = { mode: 'intervalRemote', remotePorts: s.hopPorts };
+    if (s.hopInterval) hop.interval = s.hopInterval.includes('-') ? s.hopInterval : Number(s.hopInterval);
+    udp.push({ type: 'udphop', settings: hop });
+  }
   const ss = { network: 'hysteria', security: 'tls', tlsSettings: tls, hysteriaSettings: { version: 2, auth: s.password || '' } };
   applyFinalMask(ss, s, udp.length ? { udp } : null);
   return { tag, protocol: 'hysteria', settings: { version: 2, address: s.address, port: s.port }, streamSettings: ss };

@@ -88,6 +88,7 @@ export async function openEditor(id, preset) {
     if (p === 'hysteria2') rows.push(field(t('f_obfs'), pick('obfs', ['', 'salamander', 'gecko'], true)));
     if (p === 'hysteria2' && draft.obfs === 'gecko') rows.push(field(t('f_packetSize'), text('packetSize', { placeholder: '100-1200' })));
     if (p === 'hysteria2') rows.push(field(t('f_hopPorts'), text('hopPorts', { placeholder: '20000-30000' })));
+    if (p === 'hysteria2' && draft.hopPorts) rows.push(field(t('f_hopInterval'), text('hopInterval', { placeholder: '30 / 5-15' }), { help: t('f_hopInterval_help') }));
     if ((p === 'hysteria2' && draft.obfs) || p === 'hysteria') rows.push(field(t('f_obfsPassword'), text('obfsPassword')));
     if (p === 'hysteria2' || p === 'hysteria') rows.push(field(t('f_upMbps'), text('upMbps', { type: 'number' })), field(t('f_downMbps'), text('downMbps', { type: 'number' })));
     if (p === 'tuic') rows.push(field(t('f_congestion'), pick('congestion', ['bbr', 'cubic', 'new_reno'])), field(t('f_udpRelayMode'), pick('udpRelayMode', ['native', 'quic'])));

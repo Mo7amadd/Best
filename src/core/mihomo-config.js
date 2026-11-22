@@ -62,6 +62,8 @@ function mihomoProxy(s, name = 'proxy') {
       p = { ...base, type: 'hysteria2', password: s.password || '', sni: s.sni || s.address, ...(s.allowInsecure ? { 'skip-cert-verify': true } : {}) };
       if (s.obfs === 'salamander') { p.obfs = 'salamander'; p['obfs-password'] = s.obfsPassword || ''; }
       if (s.hopPorts) p.ports = s.hopPorts;
+      // mihomo takes one number of seconds: the lower end of a range.
+      if (s.hopPorts && s.hopInterval) p['hop-interval'] = Number(s.hopInterval.split('-')[0]);
       if (s.upMbps) p.up = `${s.upMbps} Mbps`;
       if (s.downMbps) p.down = `${s.downMbps} Mbps`;
       if (s.alpn && s.alpn.length) p.alpn = s.alpn;

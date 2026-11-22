@@ -33,8 +33,15 @@ function transportBlock(s) {
   if (net === 'ws') {
     const t = { type: 'ws', path: s.path || '/' };
     if (s.host) t.headers = { Host: s.host };
-    const m = /[?&]ed=(\d+)/.exec(s.path || '');
-    if (m) { t.path = (s.path || '/').replace(/[?&]ed=\d+/, ''); t.max_early_data = Number(m[1]); t.early_data_header_name = 'Sec-WebSocket-Protocol'; }
+    // Early data (?ed=2048) becomes sing-box's own fields. Only "ed=…" and the "&" after it are
+    // taken out, so "/ws?ed=2048&key=v" stays "/ws?key=v" (as Xray sends it), not "/ws&key=v".
+    const ED = /(?<=[?&])ed=(\d+)&?/;
+    const m = ED.exec(s.path || '');
+    if (m) {
+      t.path = (s.path || '/').replace(ED, '').replace(/[?&]$/, '') || '/';
+      t.max_early_data = Number(m[1]);
+      t.early_data_header_name = 'Sec-WebSocket-Protocol';
+    }
     return t;
   }
   if (net === 'grpc') return { type: 'grpc', service_name: s.serviceName || '' };
@@ -105,6 +112,12 @@ function singBoxOutbound(s, tag = 'proxy') {
       if (s.obfs) o.obfs = { type: 'salamander', password: s.obfsPassword || '' };
       // Port hopping (mport=20000-30000,443): sing-box wants "from:to" ranges.
       if (s.hopPorts) o.server_ports = s.hopPorts.split(',').map((r) => (r.includes('-') ? r.replace('-', ':') : `${r}:${r}`));
+      if (s.hopPorts && s.hopInterval) {
+        // "5-15": a random interval in that range (sing-box 1.14 hop_interval_max).
+        const [lo, hi] = s.hopInterval.split('-');
+        o.hop_interval = `${lo}s`;
+        if (hi) o.hop_interval_max = `${hi}s`;
+      }
       if (s.upMbps) o.up_mbps = s.upMbps;
       if (s.downMbps) o.down_mbps = s.downMbps;
       return o;

@@ -3,7 +3,7 @@
 // `subscription-userinfo` header that most panels send.
 
 const { b64decode, looksLikeBase64, cleanText } = require('./util');
-const { parseLink, normalizeServer } = require('./links');
+const { parseLink, normalizeServer, SS_PLUGINS } = require('./links');
 const { parseClash, looksLikeClash } = require('./clash');
 
 const MAX_SERVERS = 5000;
@@ -45,6 +45,36 @@ function parseJsonConfigs(text, subId) {
 }
 
 /**
+ * SIP008 (the Shadowsocks JSON subscription): { "version": 1, "servers": [ { "server",
+ * "server_port", "method", "password", "remarks", "plugin", "plugin_opts" } ] }, or just the list.
+ * The port may be a number or a string. Returns null when the text is not SIP008.
+ */
+function parseSip008(text, subId) {
+  const t = String(text || '').trim();
+  if (!/^[[{]/.test(t)) return null;
+  let data;
+  try { data = JSON.parse(t); } catch { return null; }
+  const list = Array.isArray(data) ? data : data && typeof data === 'object' && Array.isArray(data.servers) ? data.servers : null;
+  const isSs = (x) => x && typeof x === 'object' && !Array.isArray(x) && typeof x.server === 'string' && x.server_port !== undefined && typeof x.method === 'string';
+  if (!list || !list.length || !list.every(isSs)) return null;
+  const servers = [];
+  const errors = [];
+  let skipped = 0;
+  list.forEach((x, i) => {
+    if (servers.length >= MAX_SERVERS) { skipped++; return; }
+    try {
+      // A plugin Best does not have would connect without it: refused rather than run wrong.
+      if (x.plugin && !SS_PLUGINS.includes(String(x.plugin))) throw new Error(`unsupported shadowsocks plugin: ${cleanText(x.plugin, 30)}`);
+      servers.push(normalizeServer({
+        protocol: 'shadowsocks', remark: cleanText(x.remarks || x.server, 120), address: x.server, port: x.server_port,
+        cipher: x.method, password: x.password, plugin: x.plugin || '', pluginOpts: x.plugin_opts || '', subId,
+      }));
+    } catch (e) { errors.push({ line: cleanText(x.remarks || `#${i + 1}`, 60), error: cleanText(e.message, 120) }); }
+  });
+  return { servers, errors, skipped };
+}
+
+/**
  * Parse every link in the text.
  * Returns { servers, errors, skipped } – bad lines never abort the whole import.
  */
@@ -57,7 +87,7 @@ function parseContent(text, { subId = '' } = {}) {
       if (/^[[{]/.test(decoded) || looksLikeClash(decoded)) text = decoded;
     } catch { /* not base64 */ }
   }
-  const json = parseJsonConfigs(text, subId);
+  const json = parseJsonConfigs(text, subId) || parseSip008(text, subId);
   if (json) return json;
   if (looksLikeClash(text)) {
     const r = parseClash(text);
@@ -114,4 +144,4 @@ function splitInfoNodes(servers) {
   return { servers: real, info };
 }
 
-module.exports = { extractLines, parseContent, parseJsonConfigs, parseUserInfo, splitInfoNodes, SCHEMES };
+module.exports = { extractLines, parseContent, parseJsonConfigs, parseSip008, parseUserInfo, splitInfoNodes, SCHEMES };

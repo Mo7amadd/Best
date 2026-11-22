@@ -4,6 +4,7 @@
 import { MAC } from './i18n-mac.js';
 
 const fa = {
+  f_hopInterval: 'فاصله‌ی پرش پورت (ثانیه)', f_hopInterval_help: 'هر چند ثانیه پورت عوض شود؛ یک عدد یا بازه مثل 5-15 (کمترین ۵). خالی = پیش‌فرض هسته (۳۰).',
   // MASQUE
   MASQUE_NO_LINK: 'MASQUE هنوز قالب لینک اشتراک‌گذاری ندارد.', f_remoteDns: 'DNS داخل تونل', f_remoteDns_help: 'IP سرورهای DNS که اسم سایت‌ها داخل تونل از آن‌ها پرسیده می‌شود. خالی = کلودفلر (1.1.1.1).',
   f_warp: 'WARP کلودفلر', f_warp_help: 'به‌جای سرور خودتان به WARP کلودفلر از راه MASQUE وصل می‌شود. کلیدها و نشانی‌ها از ثبت WARP برای MASQUE می‌آیند (مثلاً پنل 3x-ui: Xray ← خروجی‌ها ← WARP).',
@@ -174,6 +175,7 @@ const fa = {
 };
 
 const en = {
+  f_hopInterval: 'Port hop interval (seconds)', f_hopInterval_help: 'How often the port changes: one number or a range such as 5-15 (at least 5). Empty = the core default (30).',
   // MASQUE
   MASQUE_NO_LINK: 'MASQUE has no share-link format yet.', f_remoteDns: 'DNS inside the tunnel', f_remoteDns_help: 'IPs of the DNS servers asked for site names inside the tunnel. Empty = Cloudflare (1.1.1.1).',
   f_warp: 'Cloudflare WARP', f_warp_help: 'Connects to Cloudflare WARP over MASQUE instead of your own server. The keys and addresses come from a WARP registration enrolled for MASQUE (e.g. 3x-ui panel: Xray → Outbounds → WARP).',
@@ -335,6 +337,7 @@ const en = {
 };
 
 const ru = {
+  f_hopInterval: 'Интервал смены порта (с)', f_hopInterval_help: 'Как часто меняется порт: одно число или диапазон, например 5-15 (не меньше 5). Пусто — по умолчанию ядра (30).',
   // MASQUE
   MASQUE_NO_LINK: 'У MASQUE пока нет формата ссылки.', f_remoteDns: 'DNS внутри туннеля', f_remoteDns_help: 'IP DNS-серверов, у которых имена сайтов запрашиваются внутри туннеля. Пусто — Cloudflare (1.1.1.1).',
   f_warp: 'Cloudflare WARP', f_warp_help: 'Подключение к Cloudflare WARP через MASQUE вместо своего сервера. Ключи и адреса берутся из регистрации WARP для MASQUE (например, панель 3x-ui: Xray → Outbounds → WARP).',
@@ -496,6 +499,8 @@ const ru = {
 };
 
 const zh = {
+  f_hopInterval: '端口跳跃间隔（秒）',
+  f_hopInterval_help: '端口更换的频率：一个数字或范围，例如 5-15（至少 5）。留空 = 内核默认值（30）。',
   // MASQUE
   MASQUE_NO_LINK: 'MASQUE 还没有分享链接格式。',
   f_remoteDns: '隧道内 DNS',
