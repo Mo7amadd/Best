@@ -96,6 +96,37 @@ test('JSON configs: programs, file paths, reverse tunnels and webhooks are remov
   assert.deepStrictEqual([rawSb.experimental, rawSb.log.output, rawSb.inbounds.map((i) => i.type)], [undefined, undefined, ['mixed']]);
 });
 
+// XDRIVE (Xray 26.11.9): "local" writes and deletes files in any folder, "template" sends any request anywhere.
+test('JSON configs: an XDRIVE outbound may only use a cloud service, in any spelling of the keys', () => {
+  const { sanitizeConfig, hardenRaw, xrayTestConfig } = require('../src/core/custom');
+  const vnext = { vnext: [{ address: '1.2.3.4', port: 443, users: [{ id: 'b831381d-6324-4d53-ad4f-8cda48b30811', encryption: 'none' }] }] };
+  const out = (tag, streamSettings) => ({ protocol: 'vless', tag, settings: vnext, streamSettings });
+  const bad = [
+    out('local', { network: 'xdrive', xdriveSettings: { service: 'local', remoteFolder: 'C:\\Users\\Public\\Documents' } }),
+    out('template', { network: 'xdrive', xdriveSettings: { service: 'template', template: { put: { method: 'POST', url: 'http://192.168.1.1/' } } } }),
+    out('upper', { Network: 'XDRIVE', XDRIVESettings: { Service: 'local', RemoteFolder: 'C:/x' } }),
+    out('dup', { network: 'xdrive', xdriveSettings: { service: 's3', SERVICE: 'local', remoteFolder: 'C:/x' } }),
+    out('twoSettings', { network: 'xdrive', xdriveSettings: { service: 's3' }, XdriveSettings: { service: 'local', remoteFolder: 'C:/x' } }),
+    out('noService', { network: 'xdrive', xdriveSettings: { remoteFolder: 'C:/x' } }),
+    out('noSettings', { network: 'xdrive' }),
+    out('settingsOnly', { network: 'tcp', xdriveSettings: { service: 'local', remoteFolder: 'C:/x' } }),
+    { protocol: 'vless', tag: 'outerCase', settings: vnext, StreamSettings: { network: 'xdrive', xdriveSettings: { service: 'local', remoteFolder: 'C:/x' } } },
+    out('notObject', 'xdrive'),
+  ];
+  const good = [
+    out('drive', { network: 'xdrive', xdriveSettings: { service: 'google-drive', secrets: ['a', 'b', 'c'] } }),
+    out('s3', { network: 'xdrive', xdriveSettings: { service: 's3', s3: { endpoint: 'https://x.r2.cloudflarestorage.com', bucket: 'b' } } }),
+    out('plain', { network: 'xhttp', xhttpSettings: { path: '/' } }),
+    out('none', undefined),
+    { protocol: 'freedom', tag: 'direct' },
+  ];
+  const keep = good.map((o) => o.tag);
+  const cfg = { outbounds: [...bad, ...good] };
+  assert.deepStrictEqual(sanitizeConfig(cfg, 'xray', []).outbounds.map((o) => o.tag), keep);
+  assert.deepStrictEqual(hardenRaw(cfg, 'xray').outbounds.map((o) => o.tag), keep);
+  assert.deepStrictEqual(xrayTestConfig(cfg, 10808).outbounds.map((o) => o.tag), keep);
+});
+
 test('LAN sharing: names that point at this computer are caught after resolving', () => {
   const { parseLink } = require('../src/core/links');
   const { sanitizeRouting, effectiveRouting } = require('../src/core/routing');

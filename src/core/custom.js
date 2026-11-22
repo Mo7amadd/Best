@@ -20,6 +20,35 @@ const XRAY_OUT = ['freedom', 'blackhole', 'dns', 'vless', 'vmess', 'trojan', 'sh
 const SB_OUT = ['direct', 'block', 'dns', 'selector', 'urltest', 'socks', 'http', 'shadowsocks', 'vmess', 'trojan', 'naive', 'wireguard', 'hysteria', 'shadowtls', 'vless', 'tuic', 'hysteria2', 'anytls'];
 const SB_ENDPOINTS = ['wireguard'];
 
+// Xray's XDRIVE transport relays traffic through a storage service. Its "local" service creates,
+// writes, lists and deletes files in any folder named by "remoteFolder", and "template" sends
+// requests of any method, header and body to any URL (LAN devices included), so an untrusted
+// config may only use the cloud services. The names match Xray's own (case-sensitive) switch.
+const XDRIVE_SERVICES = ['google-drive', 'Google Drive', 's3'];
+
+// Xray reads JSON with Go, which matches key names regardless of case ("XDRIVESettings",
+// "Service"…) and lets a later duplicate win, so every spelling of a key is checked.
+const valuesOf = (obj, name) => Object.keys(obj).filter((k) => k.toLowerCase() === name).map((k) => obj[k]);
+
+/** An Xray outbound from an untrusted config: a carrying protocol and no XDRIVE service that touches local files. */
+function xrayOutboundAllowed(o) {
+  if (!isObj(o) || !XRAY_OUT.includes(o.protocol)) return false;
+  const ssList = valuesOf(o, 'streamsettings');
+  if (!ssList.length) return true;
+  return ssList.every((ss) => {
+    if (ss === null) return true;
+    if (!isObj(ss)) return false;
+    const xdrive = valuesOf(ss, 'network').some((n) => String(n).toLowerCase() === 'xdrive');
+    const settings = valuesOf(ss, 'xdrivesettings');
+    if (!xdrive && !settings.length) return true;
+    return settings.length > 0 && settings.every((x) => {
+      if (!isObj(x)) return false;
+      const services = valuesOf(x, 'service');
+      return services.length > 0 && services.every((s) => XDRIVE_SERVICES.includes(s));
+    });
+  });
+}
+
 /**
  * Remove, at any depth, keys that make a core read or write local files or run programs
  * (sing-box *_path / *_directory / executable*, openconnect wrappers, Xray masterKeyLog) or that
@@ -54,7 +83,7 @@ function sanitizeConfig(config, core, ownTags = []) {
       // Rules bound to inbounds Best does not create (api, reverse bridges…) are dropped.
       out.routing.rules = out.routing.rules.filter((r) => isObj(r) && asList(r.inboundTag).every((t) => ownTags.includes(t)));
     }
-    if (Array.isArray(out.outbounds)) out.outbounds = out.outbounds.filter((o) => isObj(o) && XRAY_OUT.includes(o.protocol));
+    if (Array.isArray(out.outbounds)) out.outbounds = out.outbounds.filter(xrayOutboundAllowed);
   } else {
     for (const k of SB_KEEP) if (src[k] !== undefined) out[k] = JSON.parse(JSON.stringify(src[k]));
     const level = isObj(src.log) && SB_LEVELS.includes(src.log.level) ? src.log.level : 'warn';
@@ -173,7 +202,7 @@ function hardenRaw(config, core) {
     for (const k of ['api', 'reverse', 'metrics', 'stats']) delete c[k];
     c.log = { loglevel: isObj(c.log) && XRAY_LEVELS.includes(c.log.loglevel) ? c.log.loglevel : 'warning' };
     if (isObj(c.policy)) delete c.policy.system;
-    if (Array.isArray(c.outbounds)) c.outbounds = c.outbounds.filter((o) => isObj(o) && XRAY_OUT.includes(o.protocol));
+    if (Array.isArray(c.outbounds)) c.outbounds = c.outbounds.filter(xrayOutboundAllowed);
     if (Array.isArray(c.inbounds)) c.inbounds = c.inbounds.filter((i) => isObj(i) && ['socks', 'http', 'mixed', 'dokodemo-door', 'tunnel'].includes(i.protocol));
   } else {
     for (const k of ['experimental', 'services', 'certificate']) delete c[k];
