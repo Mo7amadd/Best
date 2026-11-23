@@ -4,6 +4,7 @@
 import { MAC } from './i18n-mac.js';
 
 const fa = {
+  NO_VALID_SERVERS: 'هیچ‌کدام از لینک‌های این اشتراک خوانده نشد (شاید پروتکلی که Best نمی‌شناسد)؛ سرورهای قبلی سر جایشان ماندند.',
   f_hopInterval: 'فاصله‌ی پرش پورت (ثانیه)', f_hopInterval_help: 'هر چند ثانیه پورت عوض شود؛ یک عدد یا بازه مثل 5-15 (کمترین ۵). خالی = پیش‌فرض هسته (۳۰).',
   // MASQUE
   MASQUE_NO_LINK: 'MASQUE هنوز قالب لینک اشتراک‌گذاری ندارد.', f_remoteDns: 'DNS داخل تونل', f_remoteDns_help: 'IP سرورهای DNS که اسم سایت‌ها داخل تونل از آن‌ها پرسیده می‌شود. خالی = کلودفلر (1.1.1.1).',
@@ -175,6 +176,7 @@ const fa = {
 };
 
 const en = {
+  NO_VALID_SERVERS: 'None of the links in this subscription could be read (perhaps a protocol Best does not know); the previous servers were kept.',
   f_hopInterval: 'Port hop interval (seconds)', f_hopInterval_help: 'How often the port changes: one number or a range such as 5-15 (at least 5). Empty = the core default (30).',
   // MASQUE
   MASQUE_NO_LINK: 'MASQUE has no share-link format yet.', f_remoteDns: 'DNS inside the tunnel', f_remoteDns_help: 'IPs of the DNS servers asked for site names inside the tunnel. Empty = Cloudflare (1.1.1.1).',
@@ -337,6 +339,7 @@ const en = {
 };
 
 const ru = {
+  NO_VALID_SERVERS: 'Ни одну ссылку этой подписки не удалось прочитать (возможно, протокол, который Best не знает); прежние серверы сохранены.',
   f_hopInterval: 'Интервал смены порта (с)', f_hopInterval_help: 'Как часто меняется порт: одно число или диапазон, например 5-15 (не меньше 5). Пусто — по умолчанию ядра (30).',
   // MASQUE
   MASQUE_NO_LINK: 'У MASQUE пока нет формата ссылки.', f_remoteDns: 'DNS внутри туннеля', f_remoteDns_help: 'IP DNS-серверов, у которых имена сайтов запрашиваются внутри туннеля. Пусто — Cloudflare (1.1.1.1).',
@@ -499,6 +502,7 @@ const ru = {
 };
 
 const zh = {
+  NO_VALID_SERVERS: '此订阅中的链接都无法读取（可能是 Best 不支持的协议）；已保留之前的服务器。',
   f_hopInterval: '端口跳跃间隔（秒）',
   f_hopInterval_help: '端口更换的频率：一个数字或范围，例如 5-15（至少 5）。留空 = 内核默认值（30）。',
   // MASQUE

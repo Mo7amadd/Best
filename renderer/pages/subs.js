@@ -6,7 +6,7 @@ import { S, ui, api, run, render, formatBytes, go, localSet } from '../app.js';
 import { subLinks, subNotices } from './servers.js';
 
 // Codes the main process gives for a failed subscription, in the user's language (else as sent).
-const SUB_ERRORS = ['FILTER_EMPTY', 'HWID_LIMIT', 'HWID_REQUIRED', 'INSECURE_REDIRECT'];
+const SUB_ERRORS = ['FILTER_EMPTY', 'HWID_LIMIT', 'HWID_REQUIRED', 'INSECURE_REDIRECT', 'NO_VALID_SERVERS'];
 const subError = (e) => (e === 'EMPTY' ? t('emptySub') : SUB_ERRORS.includes(e) ? t(e) : e);
 
 export function openSubEditor(id) {

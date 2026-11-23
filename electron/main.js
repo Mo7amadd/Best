@@ -31,7 +31,7 @@ const tester = require('./tester');
 const { Updater, extInstalled, mihomoInstalled, setElevated, cleanupOldCores, protectedInstall, allCoreExes } = require('./updater');
 const trayI18n = require('./tray-i18n');
 const { normalizeServer, toLink, serverKey, sameConnection, transportLabel, customInboundPorts, parseLink } = require('../src/core/links');
-const { parseContent, parseUserInfo, splitInfoNodes } = require('../src/core/subscription');
+const { parseContent, parseUserInfo, splitInfoNodes, updateOutcome } = require('../src/core/subscription');
 const hwid = require('../src/core/hwid');
 const { serverHasIpv6 } = require('./ipv6probe');
 const { sanitizeSettings, sanitizeRouting, DEFAULT_ROUTING, DEFAULT_SETTINGS } = require('../src/core/settings');
@@ -1038,9 +1038,10 @@ async function updateSub(sub) {
   sub.announce = result.announce;
   applyPanelRouting(sub, result.routing);
   if (sub.autoName && result.title) sub.name = result.title;
+  const outcome = updateOutcome({ servers: real.length, info: info.length, errors: parsed.errors.length, device: result.device });
   // Expired / out of data: panels such as 3x-ui then return only info entries. Keep the old
   // servers (so nothing silently disappears) and show the panel's message instead.
-  if (!real.length && info.length) {
+  if (outcome === 'notice') {
     sub.notice = info.slice(0, 3).join(' · ');
     sub.infoNodes = info.slice(0, 10);
     sub.lastUpdate = Date.now();
@@ -1049,9 +1050,10 @@ async function updateSub(sub) {
     return { count: servers.filter((s) => s.subId === sub.id).length, errors: parsed.errors.length, notice: sub.notice };
   }
   sub.notice = '';
-  if (!real.length && parsed.errors.length === 0 && !info.length) {
-    // An empty answer with the panel's device-limit flag: say that, not "empty".
-    sub.error = result.device === 'limit' ? 'HWID_LIMIT' : result.device === 'required' ? 'HWID_REQUIRED' : 'EMPTY';
+  if (outcome !== 'replace') {
+    // Nothing usable (empty, the device limit, or links none of which could be read): the old
+    // servers stay and the reason is shown.
+    sub.error = outcome;
     saveSubs();
     throw new Error(sub.error);
   }

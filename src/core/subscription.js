@@ -115,6 +115,20 @@ function parseContent(text, { subId = '' } = {}) {
   return { servers, errors, skipped };
 }
 
+/**
+ * What an update does with what it read (after the name filters): 'replace' the subscription's
+ * servers, keep them and show the panel's 'notice' (an expired subscription that only sends info
+ * lines), or keep them and fail with an error code. The servers are never replaced by nothing:
+ * when the answer had links but none could be read (a protocol Best does not know, broken links),
+ * the old servers stay.
+ */
+function updateOutcome({ servers = 0, info = 0, errors = 0, device = '' } = {}) {
+  if (servers > 0) return 'replace';
+  if (info > 0) return 'notice';
+  if (errors > 0) return 'NO_VALID_SERVERS';
+  return device === 'limit' ? 'HWID_LIMIT' : device === 'required' ? 'HWID_REQUIRED' : 'EMPTY';
+}
+
 /** `upload=1; download=2; total=3; expire=1700000000` → numbers (bytes / unix seconds). */
 function parseUserInfo(header) {
   const out = {};
@@ -144,4 +158,4 @@ function splitInfoNodes(servers) {
   return { servers: real, info };
 }
 
-module.exports = { extractLines, parseContent, parseJsonConfigs, parseSip008, parseUserInfo, splitInfoNodes, SCHEMES };
+module.exports = { extractLines, parseContent, parseJsonConfigs, parseSip008, parseUserInfo, splitInfoNodes, updateOutcome, SCHEMES };
