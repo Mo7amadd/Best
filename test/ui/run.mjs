@@ -784,6 +784,27 @@ try {
     assert(!bad.length, bad.slice(0, 6).join(' | '));
   }, 120000);
 
+  await check('subscription editor: "pre-resolve server names" is chosen with the mouse and saved', async () => {
+    const T = (k) => ev(`import(new URL('i18n.js', document.baseURI).href).then((m) => m.t(${JSON.stringify(k)}))`);
+    const [label, save] = await Promise.all([T('sub_preResolve'), T('save')]);
+    await ev(`[...document.querySelectorAll('aside .nav-btn')][0].click()`); await wait(400);
+    const add = await ev(`window.__pt('.tab-add', 0)`);
+    await click(add[0], add[1]); await wait(500);
+    const url = await ev(`(() => { const i = document.querySelector('.drawer input[placeholder^="https"]'); const r = i.getBoundingClientRect(); return [Math.round(r.left + 30), Math.round(r.top + r.height / 2)]; })()`);
+    await click(url[0], url[1]); await send('Input.insertText', { text: 'https://sub.example.com/ui-preresolve' }); await wait(150);
+    const btn = await ev(`(() => { const f = [...document.querySelectorAll('.drawer .field')].find((x) => x.querySelector('.field-label')?.textContent === ${JSON.stringify(label)}); const b = f && f.querySelector('.select-btn'); if (!b) return null; b.scrollIntoView({ block: 'center' }); const r = b.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+    assert(btn, 'no pre-resolve choice in the editor');
+    await click(btn[0], btn[1]); await wait(250);
+    const opt = await ev(`(() => { const o = [...document.querySelectorAll('.menu [role=option]')].find((x) => x.textContent.includes('1.1.1.1')); if (!o) return null; const r = o.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+    assert(opt, 'the Cloudflare option is missing');
+    await click(opt[0], opt[1]); await wait(250);
+    const sv = await ev(`(() => { const b = [...document.querySelectorAll('.drawer button')].find((x) => x.textContent.trim() === ${JSON.stringify(save)}); const r = b.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+    await click(sv[0], sv[1]); await wait(600);
+    const sub = await ev(`best.getState().then((s) => s.subs.find((x) => x.url.includes('ui-preresolve')))`);
+    assert(sub && sub.preResolve === 'https://1.1.1.1/dns-query', 'saved: ' + JSON.stringify(sub && sub.preResolve));
+    await ev(`best.removeSub ? best.removeSub(${JSON.stringify(sub.id)}, false) : null`); await wait(300);
+  });
+
   await check('every page: every dropdown, switch and choice works, no script errors', async () => {
     const pages = await ev(`[...document.querySelectorAll('aside .nav-btn:not(.nav-help)')].map((b) => b.getAttribute('aria-label') || b.textContent.trim())`);
     const before = page.errors.length;

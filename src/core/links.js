@@ -747,6 +747,12 @@ function normalizeServer(input) {
     num('mtu', 576, 9000);
   }
   if (protocol === 'masque') normalizeMasque(s, input);
+  // The name a pre-resolved subscription server had before it was replaced by its IP (shown, and
+  // used to recognise the same server after the next update even when the IP changed).
+  if (input.resolvedFrom && /^[0-9a-f.:]+$/i.test(s.address)) {
+    const name = cleanText(input.resolvedFrom, 253).toLowerCase();
+    if (/^[a-z0-9.-]{1,253}$/.test(name) && /[a-z]/.test(name)) s.resolvedFrom = name;
+  }
   // Proxy chain: reach this server through another one (its id).
   if (/^[a-f0-9]{6,32}$/.test(input.via || '') && input.via !== s.id) s.via = input.via;
   // Keep runtime test results when re-normalizing stored servers.
@@ -870,7 +876,8 @@ function toLink(server) {
 function serverKey(s) {
   if (s.protocol === 'custom') return 'custom|' + s.config;
   if (s.protocol === 'group') return 'group|' + s.id;
-  return [s.protocol, s.address, s.port, s.uuid || s.password || s.privateKey || '', s.network || '', s.path || s.serviceName || '', s.host || '', s.tls || ''].join('|');
+  // A pre-resolved server counts by its name: the same server even when its IP changed.
+  return [s.protocol, s.resolvedFrom || s.address, s.port, s.uuid || s.password || s.privateKey || '', s.network || '', s.path || s.serviceName || '', s.host || '', s.tls || ''].join('|');
 }
 
 // What describes a server's name, place or results, not how to connect to it.

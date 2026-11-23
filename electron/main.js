@@ -40,6 +40,7 @@ const { needsSingBox, isUnencrypted, hysteriaNeedsXray } = require('../src/core/
 const { singBoxOutbound } = require('../src/core/singbox-config');
 const { pickCore } = require('../src/core/group');
 const { parseHosts } = require('../src/core/dns');
+const preresolve = require('../src/core/preresolve');
 const { canMihomo } = require('../src/core/mihomo-config');
 const { xrayTestConfig } = require('../src/core/custom');
 const { cleanText, randomId, checkSs2022Key } = require('../src/core/util');
@@ -217,6 +218,8 @@ function sanitizeSub(s) {
     via: /^[a-f0-9]{6,32}$/.test(s.via || '') ? s.via : '', // every server of this subscription is reached through this one
     filter: validRegex(s.filter),
     exclude: validRegex(s.exclude),
+    // Pre-resolve the servers' names with this resolver on every update ('' = off).
+    preResolve: preresolve.PRE_RESOLVERS.includes(s.preResolve) ? s.preResolve : '',
     autoUpdateHours: Number.isInteger(s.autoUpdateHours) && s.autoUpdateHours >= 0 && s.autoUpdateHours <= 720 ? s.autoUpdateHours : 0,
     lastUpdate: Number.isFinite(s.lastUpdate) ? s.lastUpdate : 0,
     info: {
@@ -970,6 +973,28 @@ function applyPanelRouting(sub, header) {
   }
 }
 
+/**
+ * One server name → one IP, with the resolver chosen for a subscription: this computer's DNS, or
+ * DoH by IP (RFC 8484, sent directly: the point is an answer that the local DNS did not touch).
+ * '' when nothing came back in time.
+ */
+async function preResolveName(resolver, name) {
+  if (resolver === 'localhost') {
+    const all = await require('dns').promises.lookup(name, { all: true, verbatim: true });
+    const pick = all.find((a) => a.family === 4) || (settings.dnsIpv4Only ? null : all[0]);
+    return pick ? pick.address : '';
+  }
+  if (!/^https:\/\/[0-9.]+\/dns-query$/.test(resolver)) return '';
+  for (const type of settings.dnsIpv4Only ? [1] : [1, 28]) {
+    const url = `${resolver}?dns=${preresolve.dnsQuery(name, type).toString('base64url')}`;
+    const res = await fetch(url, { headers: { Accept: 'application/dns-message' }, signal: AbortSignal.timeout(6000), redirect: 'error' });
+    if (!res.ok) continue;
+    const ips = preresolve.dnsAnswers(Buffer.from(await res.arrayBuffer()), type);
+    if (ips.length) return ips[0];
+  }
+  return '';
+}
+
 async function updateSub(sub) {
   const tryProxy = cores.state.running;
   // While traffic goes through Best, a failed fetch through the tunnel never falls back to a direct
@@ -1057,11 +1082,20 @@ async function updateSub(sub) {
     saveSubs();
     throw new Error(sub.error);
   }
+  // Pre-resolving (an option of the subscription): names become the IPs the chosen resolver gives.
+  let list = real;
+  if (sub.preResolve) {
+    list = await preresolve.preResolveServers(real, (n) => preResolveName(sub.preResolve, n)).catch(() => real);
+    // The changed servers pass the same checks as any other (a failure keeps the server by name).
+    list = list.map((s, i) => { if (!s.resolvedFrom) return s; try { return normalizeServer(s); } catch { return real[i]; } });
+    const done = list.filter((s) => s.resolvedFrom).length;
+    cores.log('app', `subscription ${sub.name}: ${done} of ${real.length} server names pre-resolved`);
+  }
   // Replace this subscription's servers. The same server keeps its id (and so the selection) and its
   // usage; its test results stay only when nothing but the name changed (a new SNI or Reality key
   // makes an old result meaningless).
   const old = new Map(servers.filter((s) => s.subId === sub.id).map((s) => [serverKey(s), s]));
-  const fresh = real.map((s) => {
+  const fresh = list.map((s) => {
     const prev = old.get(serverKey(s));
     if (!prev) return s;
     const kept = { ...s, id: prev.id, usageUp: prev.usageUp, usageDown: prev.usageDown };

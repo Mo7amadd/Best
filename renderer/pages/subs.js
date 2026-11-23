@@ -33,6 +33,12 @@ export function openSubEditor(id) {
         field(t('sub_exclude'), input(draft.exclude || '', (v) => { draft.exclude = v; }, { dir: 'ltr', class: 'input mono', placeholder: 'expire|traffic' }))),
       h('div', { class: 'field-help' }, t('sub_filter_help')),
       field(t('via'), select([{ value: '', label: t('via_none') }, ...S.servers.filter((s) => s.protocol !== 'group' && s.protocol !== 'custom' && s.subId !== draft.id).map((s) => ({ value: s.id, label: s.remark || s.address }))], draft.via || '', (v) => { draft.via = v; }, { search: true }), { help: t('via_sub_help') }),
+      field(t('sub_preResolve'), select([
+        { value: '', label: t('sub_preResolve_off') },
+        { value: 'localhost', label: t('sub_preResolve_system') },
+        { value: 'https://1.1.1.1/dns-query', label: 'Cloudflare DoH (1.1.1.1)' },
+        { value: 'https://8.8.8.8/dns-query', label: 'Google DoH (8.8.8.8)' },
+      ], draft.preResolve || '', (v) => { draft.preResolve = v; }), { help: t('sub_preResolve_help') }),
       field(t('sub_autoHours'), input(String(draft.autoUpdateHours || 0), (v) => { draft.autoUpdateHours = Number.parseInt(v, 10) || 0; }, { type: 'number', min: 0, max: 720, dir: 'ltr' })),
       h('div', { class: 'switch-row' }, h('div', { class: 'txt' }, h('span', null, t('sub_enabled'))),
         (function sw() { const el = toggle(draft.enabled, (v) => { draft.enabled = v; el.setAttribute('aria-checked', String(v)); }, { label: t('sub_enabled') }); return el; })())),
