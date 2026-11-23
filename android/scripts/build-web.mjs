@@ -66,8 +66,20 @@ bundle += `globalThis.BestCore = Object.freeze(load(${JSON.stringify(entryId)}))
 rmSync(out, { recursive: true, force: true });
 mkdirSync(join(out, 'fonts'), { recursive: true });
 writeFileSync(join(out, 'core.js'), bundle);
-for (const f of ['i18n.js', 'dom.js']) copyFileSync(join(repo, 'renderer', f), join(out, f));
+// i18n.js and dom.js, and every file next to them that they import (such as i18n-mac.js): a
+// missing one stops the page from loading at all, so the list is never written by hand.
+const ui = [];
+const want = ['i18n.js', 'dom.js'];
+while (want.length) {
+  const f = want.shift();
+  if (ui.includes(f)) continue;
+  const src = join(repo, 'renderer', f);
+  if (!existsSync(src)) throw new Error(`renderer/${f} is imported but missing`);
+  ui.push(f);
+  copyFileSync(src, join(out, f));
+  for (const m of readFileSync(src, 'utf8').matchAll(/^\s*(?:import|export)\b[^;'"]*?\bfrom\s*['"]\.\/([\w.-]+\.js)['"]/gm)) want.push(m[1]);
+}
 for (const f of readdirSync(join(repo, 'renderer', 'fonts'))) {
   if (f.endsWith('.woff2')) copyFileSync(join(repo, 'renderer', 'fonts', f), join(out, 'fonts', f));
 }
-console.log(`web/gen: core.js (${modules.size} modules, ${(bundle.length / 1024).toFixed(0)} KB), i18n.js, dom.js, fonts`);
+console.log(`web/gen: core.js (${modules.size} modules, ${(bundle.length / 1024).toFixed(0)} KB), ${ui.join(', ')}, fonts`);
