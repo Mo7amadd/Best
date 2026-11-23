@@ -234,13 +234,15 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 .sheet-body > * { flex-shrink: 0; }
 .sheet-body > .btn:last-child { margin-bottom: 4px; }
 .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.tile { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; height: 104px; padding: 14px; border-radius: 22px; background: var(--group); text-align: start; }
+/* Height grows with the text: large system text or a longer language must not spill out of the box. */
+.tile { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; min-height: 104px; height: auto; padding: 14px; border-radius: 22px; background: var(--group); text-align: start; min-width: 0; }
+.tile > span:last-child, .wide .item-main { min-width: 0; max-width: 100%; overflow-wrap: anywhere; line-height: 1.35; }
 .tile:disabled { opacity: .45; }
 .tile b, .wide b { font-size: 15px; font-weight: 500; }
 .tile small, .wide small { font-size: 12px; color: var(--text3); }
 .badge-icon { width: 38px; height: 38px; flex: 0 0 auto; border-radius: 19px; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; }
 .wide:disabled { opacity: .45; }
-.wide { display: flex; align-items: center; gap: 14px; min-height: 62px; padding: 0 16px; border-radius: 22px; background: var(--group); text-align: start; width: 100%; }
+.wide { display: flex; align-items: center; gap: 14px; min-height: 62px; padding: 10px 16px; border-radius: 22px; background: var(--group); text-align: start; width: 100%; }
 @keyframes rise { from { transform: translateY(100%); } }
 @keyframes fade { from { opacity: 0; } }
 

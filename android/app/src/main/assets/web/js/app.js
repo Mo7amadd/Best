@@ -479,6 +479,17 @@ function askShared(text) {
   else showToast(t('nothingFound'), true);
 }
 
+/** How many config links (vless://, vmess://, JSON…) a text holds; the last text is remembered (drawn every second while connected). */
+let linksMemo = { text: null, n: 0 };
+function countLinks(text) {
+  if (linksMemo.text !== text) {
+    let n = 0;
+    try { n = Core.subscription.splitInfoNodes(Core.subscription.parseContent(text).servers || []).servers.length; } catch { n = 0; }
+    linksMemo = { text, n };
+  }
+  return linksMemo.n;
+}
+
 async function fromClipboard() {
   try { await importText(await call('clip.read')); } catch (e) { showToast(errText(e.code), true); }
 }
@@ -1191,19 +1202,34 @@ function viewSheet() {
         h('span', { class: 'item-main' }, h('b', null, t('newConfig')), h('small', null, t('newConfigHint')))),
     ];
   } else if (sh.type === 'addSub') {
-    title = t('subAdd');
+    // A subscription link, or config links pasted here by mistake: those are added as configs
+    // instead of leaving the button grey with no word why.
     const busy = Boolean(sh.busy);
-    const insecure = /^http:\/\//i.test(sh.url || '');
+    const raw = String(sh.url || '').trim().slice(0, 200000);
+    const isUrl = /^https?:\/\/\S+$/i.test(raw);
+    const links = raw && !isUrl ? countLinks(raw) : 0;
+    const insecure = isUrl && /^http:\/\//i.test(raw);
+    title = links ? t('addTitle') : t('subAdd');
+    const go = async () => {
+      if (sh.busy) return;
+      if (links) return importText(raw);
+      if (!isUrl) return;
+      sh.busy = true; render();
+      await addSub(raw, sh.name);
+      if (S.sheet === sh) { sh.busy = false; render(); }
+    };
+    // The keyboard's Enter / Go key adds too (Shift+Enter still starts a new line).
+    const enter = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); go(); } };
     body = [
-      h('div', { class: 'field' }, h('label', null, t('subUrl')),
-        h('input', { class: 'ltr', type: 'url', inputmode: 'url', autocomplete: 'off', spellcheck: 'false', value: sh.url || '', placeholder: 'https://', onInput: (e) => { sh.url = e.target.value; render(); } })),
-      h('div', { class: 'field' }, h('label', null, t('subName')),
-        h('input', { type: 'text', autocomplete: 'off', value: sh.name || '', onInput: (e) => { sh.name = e.target.value; } })),
+      h('div', { class: 'field' }, h('label', null, links ? t('configLinks') : t('subUrl')),
+        h('textarea', { class: 'ltr short', rows: '2', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', enterkeyhint: 'go', value: sh.url || '', placeholder: 'https://', 'data-key': 'sub-url', onInput: (e) => { sh.url = e.target.value; render(); }, onKeyDown: enter }),
+        h('small', null, t('subUrlHint'))),
+      links ? null : h('div', { class: 'field' }, h('label', null, t('subName')),
+        h('input', { type: 'text', autocomplete: 'off', enterkeyhint: 'go', value: sh.name || '', 'data-key': 'sub-name', onInput: (e) => { sh.name = e.target.value; }, onKeyDown: enter })),
       insecure ? h('div', { class: 'note warn' }, icon('alert', 18, 1.9), h('span', null, t('subHttpWarn'))) : null,
-      h('button', {
-        class: 'btn primary', disabled: busy || !/^https?:\/\/\S+$/i.test((sh.url || '').trim()),
-        onClick: async () => { sh.busy = true; render(); await addSub(sh.url, sh.name); if (S.sheet === sh) { sh.busy = false; render(); } },
-      }, busy ? t('subAdding') : t('subAdd')),
+      raw && !isUrl && !links ? h('div', { class: 'note warn' }, icon('alert', 18, 1.9), h('span', null, t('nothingFound'))) : null,
+      h('button', { class: 'btn primary', disabled: busy || (!isUrl && !links), onClick: go },
+        busy ? t('subAdding') : links === 1 ? t('addConfig1') : links ? t('addConfigsN', { n: num(links) }) : t('subAdd')),
     ];
   } else if (sh.type === 'test') {
     title = t('testTitle');
