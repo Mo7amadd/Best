@@ -287,8 +287,11 @@ function dnsConfig(settings, routing) {
   const servers = [xrayDnsServer(routing.mode === 'direct' ? (settings.directDns || 'localhost') : (settings.remoteDns || 'https://1.1.1.1/dns-query'))];
   const local = routing.mode === 'bypass-local' ? xrayCountryRules(routing.country, routing.geoExt) : null;
   if (local) {
+    // Its own tag: the queries of the direct resolver are routed "direct" by a rule of their own
+    // (buildXrayConfig). Under the shared tag they matched the "everything DNS → proxy" rule first,
+    // so a direct resolver such as 8.8.8.8 was asked through the proxy.
     const d = xrayDnsServer(settings.directDns || 'localhost');
-    servers.push({ ...(typeof d === 'object' ? d : { address: d }), domains: local.domains, skipFallback: true });
+    servers.push({ ...(typeof d === 'object' ? d : { address: d }), domains: local.domains, skipFallback: true, tag: 'dns-direct' });
   }
   const dns = { servers, queryStrategy: settings.dnsIpv4Only ? 'UseIPv4' : 'UseIP', tag: 'dns-internal' };
   const hosts = settings.hostsMap || {};
@@ -374,6 +377,8 @@ function buildXrayConfig(server, settings, routing, { loopbackPort = 0, statsPor
   if (settings.allowLan) rules.unshift({ type: 'field', inboundTag: ['socks-lan', 'http-lan'], ip: ['127.0.0.0/8', '::1/128'], outboundTag: 'block' }, { type: 'field', inboundTag: ['socks-lan', 'http-lan'], domain: ['full:localhost'], outboundTag: 'block' });
   // Internal DNS traffic follows the same policy as everything else (through the proxy by default).
   rules.unshift({ type: 'field', inboundTag: ['dns-internal'], outboundTag: routing.mode === 'direct' ? 'direct' : 'proxy' });
+  // The direct resolver of "my country direct" goes direct, ahead of every other rule.
+  if (routing.mode === 'bypass-local') rules.unshift({ type: 'field', inboundTag: ['dns-direct'], outboundTag: 'direct' });
   if (loop) {
     ins.push(loopbackInbound(server, loopbackPort, 'loop-in'));
     // Plain freedom (system resolver) so resolving the server name never depends on the tunnel itself.

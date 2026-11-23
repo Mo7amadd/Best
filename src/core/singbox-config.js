@@ -226,18 +226,25 @@ function buildSingBoxConfig(server, settings, routing, { clashApi = null } = {})
   ];
   const isWg = server.protocol === 'wireguard';
   const local = routing.mode === 'bypass-local' ? singBoxCountryRuleSets(routing.country) : null;
+  // The direct resolver from Settings (as Xray uses it); "localhost" = this computer's own DNS.
+  // "local" stays the system resolver: it also finds the names of the servers and of DoH resolvers.
+  const directDns = settings.directDns && settings.directDns !== 'localhost' ? { tag: 'direct-dns', ...dohServer(settings.directDns) } : null;
+  // A resolver given by name (https://dns.google/dns-query) has its own name found by the system DNS.
+  if (directDns && !/^[0-9.]+$|:/.test(directDns.server)) directDns.domain_resolver = 'local';
+  const direct = directDns ? 'direct-dns' : 'local';
   const config = {
     log: { level: settings.logLevel === 'warning' ? 'warn' : settings.logLevel === 'none' ? 'panic' : settings.logLevel, timestamp: true },
     dns: {
       servers: [
         { tag: 'remote', ...dohServer(settings.remoteDns), detour: 'proxy' },
         { tag: 'local', type: 'local' },
+        ...(directDns ? [directDns] : []),
       ],
       rules: local ? [
-        ...(local.sets.length > 1 ? [{ rule_set: [local.sets[1].tag], server: 'local' }] : []),
-        { domain_suffix: [local.suffix], server: 'local' },
+        ...(local.sets.length > 1 ? [{ rule_set: [local.sets[1].tag], server: direct }] : []),
+        { domain_suffix: [local.suffix], server: direct },
       ] : [],
-      final: routing.mode === 'direct' ? 'local' : 'remote',
+      final: routing.mode === 'direct' ? direct : 'remote',
       strategy: settings.dnsIpv4Only ? 'ipv4_only' : routing.singboxStrategy || 'prefer_ipv4',
     },
     inbounds,
