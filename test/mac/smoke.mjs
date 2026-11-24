@@ -153,6 +153,8 @@ async function connect(match) {
 let page = null;
 await check(true, 'Best opens its window', async () => {
   page = await connect('index');
+  // The page may be reached a moment before its preload script has run: wait for window.best.
+  for (let i = 0; i < 60 && !(await page.ev('typeof window.best === "object" && window.best !== null').catch(() => false)); i++) await wait(500);
   const plat = await page.ev('window.best.platform');
   if (plat !== 'mac') throw new Error(`platform is ${plat}`);
   // The page draws after its first answer from the main process (which reads the encrypted data).

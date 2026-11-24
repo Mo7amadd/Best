@@ -130,6 +130,9 @@ try {
   // add a banner above the page, moving everything down between aiming and clicking: wait for it.
   const updatesSettled = () => ev(`(async () => { const m = await import(new URL('app.js', document.baseURI).href); for (let i = 0; i < 150 && m.S.updates && m.S.updates.checking; i++) await new Promise((r) => setTimeout(r, 100)); })()`);
   const openSettings = async () => { await updatesSettled(); await ev(`[...document.querySelectorAll('aside .nav-btn')][6].click()`); await wait(500); };
+  // Wait until `test(value)` holds (or `ms` passed) instead of a fixed time: the menu marker and the
+  // smooth scroll take longer on slow machines (the GitHub Macs). Returns the last value.
+  const settle = async (get, test, ms = 5000) => { let v = await get(); for (let t = 0; t < ms && !test(v); t += 150) { await wait(150); v = await get(); } return v; };
   const setView = () => ev(`(() => {
     const page = document.querySelector('${SP}');
     const m = document.querySelector('.set-nav .subs.open .sub-marker');
@@ -321,8 +324,9 @@ try {
     const where = await ev(`document.querySelector('.set-find-item .set-find-sec').textContent`);
     assert(where.includes('›'), `result has no page › section: ${where}`);
     const first = await center('.set-find-item');
-    await click(first[0], first[1]); await wait(700);
-    const r = await ev(`(() => { const t = document.querySelector('.set-flash'); if (!t) return null; const b = t.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, h: innerHeight, list: Boolean(document.querySelector('.set-find-list')) }; })()`);
+    await click(first[0], first[1]);
+    const flash = () => ev(`(() => { const t = document.querySelector('.set-flash'); if (!t) return null; const b = t.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, h: innerHeight, list: Boolean(document.querySelector('.set-find-list')) }; })()`);
+    const r = await settle(flash, (x) => x && x.top >= 0 && x.bottom <= x.h);
     assert(r, `nothing highlighted (results: ${n}, page ${(await setView()).page + 1})`);
     assert((await setView()).page === 3, `opened page ${(await setView()).page + 1}, not Backup`);
     assert(r.top >= 0 && r.bottom <= r.h, 'highlighted setting is not on screen');
@@ -338,9 +342,8 @@ try {
     await send('Input.insertText', { text: 'MTU' }); await wait(250);
     await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
     await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
-    await wait(700);
-    const v = await setView();
-    const r = await ev(`(() => { const t = document.querySelector('.set-flash'); if (!t) return null; const b = t.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, h: innerHeight, open: Boolean(t.closest('.adv.open')) }; })()`);
+    const v = await settle(setView, (x) => x.page === 1 && x.sub === 1 && x.marker);
+    const r = await settle(() => ev(`(() => { const t = document.querySelector('.set-flash'); if (!t) return null; const b = t.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, h: innerHeight, open: Boolean(t.closest('.adv.open')) }; })()`), (x) => x && x.open && x.top >= 0 && x.bottom <= x.h);
     assert(v.page === 1 && v.sub === 1 && v.marker, `page ${v.page + 1}, subsection ${v.sub}, marker ${v.marker}`);
     assert(r && r.open && r.top >= 0 && r.bottom <= r.h, `highlight ${JSON.stringify(r)}`);
     await ev(`(() => { const i = document.querySelector('.set-find input'); i.value = ''; i.blur(); })()`);
