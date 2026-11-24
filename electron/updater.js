@@ -226,6 +226,48 @@ class Updater extends EventEmitter {
     for (const [k, c] of Object.entries(COMPONENTS)) this.state.items[k] = { current: '', latest: '', available: false, busy: false, progress: 0, error: '', custom: false, optional: Boolean(c.optional), installed: !c.optional };
     this.meta = this.readMeta();
     this.aborts = new Map(); // id → AbortController while its download runs
+    // While checking (quickly): text requests wait 8 s per route instead of 20, and once the tunnel
+    // failed but the direct route answered, the rest of the check goes direct at once.
+    this.quickDepth = 0;
+    this.skipTunnel = false;
+    this.sessionRules = {};
+  }
+
+  get textTimeout() { return this.quickDepth > 0 ? 8000 : 20000; }
+
+  /** Run `fn` as a check: short waits, and no second wait for a tunnel that does not answer. */
+  async quickly(fn) {
+    this.quickDepth++;
+    try { return await fn(); } finally {
+      this.quickDepth--;
+      if (!this.quickDepth) this.skipTunnel = false;
+    }
+  }
+
+  /**
+   * One session per route (through the tunnel / direct), each set up once: requests running at the
+   * same time (a check asks for several components together) never switch each other's proxy.
+   */
+  async routeSession(rules) {
+    const name = rules ? 'best-updates-tunnel' : 'best-updates';
+    const ses = session.fromPartition(name);
+    const want = rules || 'direct';
+    if (this.sessionRules[name] !== want) {
+      await ses.setProxy(rules ? { proxyRules: rules } : { mode: 'direct' });
+      this.sessionRules[name] = want;
+    }
+    return ses;
+  }
+
+  /** The routes to try, tunnel first when it is up (GitHub is often blocked), then direct. */
+  routes() {
+    const port = this.getProxyPort();
+    return port && !this.skipTunnel ? [`http=127.0.0.1:${port};https=127.0.0.1:${port}`, null] : [null];
+  }
+
+  /** The tunnel failed but the direct route answered: remember it for the rest of a running check. */
+  noteRoute(rules, ok) {
+    if (ok && !rules && this.quickDepth > 0 && this.getProxyPort()) this.skipTunnel = true;
   }
 
   /** Stop a running download. Nothing is replaced: files are only swapped after a full, verified download. */
@@ -256,22 +298,20 @@ class Updater extends EventEmitter {
   /** `maxBytes` / `timeoutMs`: limits for one download (Best's own update is larger than a core). */
   /** `head`: only follow the redirects and return the final address (no body). */
   async fetch(url, { binary = false, head = false, onProgress, maxBytes = MAX_DOWNLOAD, timeoutMs = 600000, signal = null } = {}) {
-    // Try through the tunnel first when it is up (GitHub is often blocked), then direct.
-    const port = this.getProxyPort();
-    const attempts = port ? [`http=127.0.0.1:${port};https=127.0.0.1:${port}`, null] : [null];
+    const attempts = this.routes();
     let lastErr;
     for (const rules of attempts) {
       try {
-        const ses = session.fromPartition('best-updates');
-        await ses.setProxy(rules ? { proxyRules: rules } : { mode: 'direct' });
+        const ses = await this.routeSession(rules);
         const api = url.startsWith('https://api.github.com/');
         const res = await ses.fetch(url, {
           method: head ? 'HEAD' : 'GET',
           headers: { 'User-Agent': `Best/${app.getVersion()}`, Accept: binary ? 'application/octet-stream' : api ? 'application/vnd.github+json' : '*/*' },
           redirect: 'follow', credentials: 'omit', cache: 'no-store',
-          signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(binary ? timeoutMs : 20000)]) : AbortSignal.timeout(binary ? timeoutMs : 20000),
+          signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(binary ? timeoutMs : this.textTimeout)]) : AbortSignal.timeout(binary ? timeoutMs : this.textTimeout),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (attempts.length > 1) this.noteRoute(rules, true);
         if (head) return res.url;
         if (!binary) return await res.text();
         const total = Number(res.headers.get('content-length')) || 0;
@@ -302,15 +342,14 @@ class Updater extends EventEmitter {
    * does not tell the final address, so this uses net.request; tunnel first, then direct, like fetch.
    */
   async redirectTarget(url) {
-    const port = this.getProxyPort();
+    const attempts = this.routes();
     let lastErr;
-    for (const rules of port ? [`http=127.0.0.1:${port};https=127.0.0.1:${port}`, null] : [null]) {
+    for (const rules of attempts) {
       try {
-        const ses = session.fromPartition('best-updates');
-        await ses.setProxy(rules ? { proxyRules: rules } : { mode: 'direct' });
-        return await new Promise((resolve, reject) => {
+        const ses = await this.routeSession(rules);
+        const target = await new Promise((resolve, reject) => {
           const req = net.request({ url, method: 'HEAD', session: ses, redirect: 'manual', credentials: 'omit', useSessionCookies: false });
-          const timer = setTimeout(() => { req.abort(); reject(new Error('timed out')); }, 20000);
+          const timer = setTimeout(() => { req.abort(); reject(new Error('timed out')); }, this.textTimeout);
           const done = (fn) => (v) => { clearTimeout(timer); fn(v); };
           req.setHeader('User-Agent', `Best/${app.getVersion()}`);
           req.on('redirect', (status, method, to) => { done(resolve)(String(to || '')); req.abort(); });
@@ -318,6 +357,8 @@ class Updater extends EventEmitter {
           req.on('error', done(reject));
           req.end();
         });
+        if (attempts.length > 1) this.noteRoute(rules, true);
+        return target;
       } catch (e) { lastErr = e; }
     }
     throw lastErr;
@@ -392,8 +433,12 @@ class Updater extends EventEmitter {
     if (this.state.checking) return [];
     this.state.checking = true;
     this.emit('state', this.state);
-    const found = [];
-    for (const [id, c] of Object.entries(COMPONENTS)) {
+    // Three components at a time, and short waits (quickly): with a tunnel that does not answer (a
+    // blocked server) the old one-by-one check with 20-second waits took over two minutes.
+    const ids = Object.keys(COMPONENTS);
+    const found = new Set();
+    const one = async (id) => {
+      const c = COMPONENTS[id];
       try {
         // No API request here (see latestTag): checking costs nothing of GitHub's hourly limit.
         const tag = await this.latestTag(c.repo);
@@ -418,15 +463,17 @@ class Updater extends EventEmitter {
           available = Boolean(digest) && digest !== localHash;
         }
         this.set(id, { current: current || (c.kind === 'geo' ? 'bundled' : ''), latest: tag, available, error: '', custom: c.kind === 'ext' ? false : this.isCustom(id) });
-        if (available) found.push(id);
+        if (available) found.add(id);
       } catch (e) {
         this.set(id, { error: String(e.message || e).slice(0, 200) });
       }
-    }
+    };
+    let next = 0;
+    await this.quickly(() => Promise.all(Array.from({ length: 3 }, async () => { while (next < ids.length) await one(ids[next++]); })));
     this.state.checking = false;
     this.state.checkedAt = Date.now();
     this.emit('state', this.state);
-    return found;
+    return ids.filter((id) => found.has(id));
   }
 
   isCustom(id) {

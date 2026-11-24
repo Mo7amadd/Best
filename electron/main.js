@@ -1292,8 +1292,8 @@ async function checkAppUpdate() {
   broadcast();
 }
 async function checkAll() {
-  const r = await updater.check();
-  await checkAppUpdate();
+  // The components and Best itself together, with the short waits of a check (updater.quickly).
+  const [r] = await updater.quickly(() => Promise.all([updater.check(), checkAppUpdate()]));
   return r;
 }
 let appUpdateAbort = null;
