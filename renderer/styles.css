@@ -795,3 +795,6 @@ button.exit-ip:focus-visible { outline: 2px solid var(--accent); outline-offset:
 /* Subscription cards: the action row may take a second line when the panel's support / web page
    buttons are in it too. */
 .sub-actions { flex-wrap: wrap; }
+/* Subscription cards: side by side whenever two fit (never one under the other with room to
+   spare), and narrower on wide windows (more, smaller columns instead of two wide cards). */
+.sub-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr)); }
