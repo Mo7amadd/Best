@@ -3,6 +3,8 @@
 
 const STRINGS = {
   fa: {
+    // Windows: the small window shown while an update of Best installs (appupdate.js)
+    updBody: 'Best دارد به نسخه‌ی {v} به‌روز می‌شود…', updDetail: 'وقتی تمام شد، خودش دوباره باز می‌شود. در این مدت می‌توانید با برنامه‌های دیگر کار کنید.',
     // macOS: the Keychain did not give the key of the saved servers (see main.js, loadEncryptedState)
     kcTitle: 'Best به Keychain مک دسترسی ندارد', kcDetail: 'سرورها و اشتراک‌ها با Keychain مک رمزگذاری شده‌اند. «دوباره» Best را از نو باز می‌کند؛ در پنجره‌ی مک «Always Allow» را انتخاب کنید. اگر Keychain عوض شده، «شروع از صفر» داده‌های قبلی را دست‌نخورده کنار می‌گذارد.', kcRetry: 'دوباره', kcEmpty: 'شروع از صفر',
     // macOS: the text in the system password prompt for installing / removing the TUN helper
@@ -13,6 +15,7 @@ const STRINGS = {
     servers: 'سرورها', updateSubs: 'به‌روزرسانی اشتراک‌ها', open: 'باز کردن Best', quit: 'خروج',
   },
   en: {
+    updBody: 'Best is updating to version {v}…', updDetail: 'It opens again by itself when it is done. You can keep using other programs meanwhile.',
     kcTitle: 'Best cannot reach the macOS Keychain', kcDetail: 'Servers and subscriptions are encrypted with the macOS Keychain. Try again restarts Best; choose “Always Allow” in the macOS prompt. If the Keychain was reset, Start empty sets the old data aside untouched.', kcRetry: 'Try again', kcEmpty: 'Start empty',
     tunHelperPrompt: 'Best wants to install its TUN helper service (TUN mode sends all system traffic through the tunnel).', tunHelperRemovePrompt: 'Best wants to remove its TUN helper service.',
     connected: 'Connected', disconnected: 'Disconnected', proxyOn: 'Turn system proxy on', proxyOff: 'Turn system proxy off', connect: 'Connect', disconnect: 'Disconnect',
@@ -21,6 +24,7 @@ const STRINGS = {
     servers: 'Servers', updateSubs: 'Update subscriptions', open: 'Open Best', quit: 'Quit',
   },
   ru: {
+    updBody: 'Best обновляется до версии {v}…', updDetail: 'Когда всё будет готово, он откроется сам. Пока можно работать в других программах.',
     kcTitle: 'Best не может получить доступ к связке ключей macOS', kcDetail: 'Серверы и подписки зашифрованы с помощью связки ключей macOS. «Повторить» перезапустит Best; выберите «Разрешать всегда» в окне macOS. Если связка ключей была сброшена, «Начать с нуля» отложит старые данные нетронутыми.', kcRetry: 'Повторить', kcEmpty: 'Начать с нуля',
     tunHelperPrompt: 'Best хочет установить вспомогательную службу TUN (в режиме TUN весь трафик системы идёт через туннель).', tunHelperRemovePrompt: 'Best хочет удалить вспомогательную службу TUN.',
     connected: 'Подключено', disconnected: 'Отключено', proxyOn: 'Включить системный прокси', proxyOff: 'Выключить системный прокси', connect: 'Подключиться', disconnect: 'Отключиться',
@@ -29,6 +33,8 @@ const STRINGS = {
     servers: 'Серверы', updateSubs: 'Обновить подписки', open: 'Открыть Best', quit: 'Выход',
   },
   zh: {
+    updBody: 'Best 正在更新到 {v} 版本…',
+    updDetail: '完成后会自动重新打开。在此期间可以继续使用其他程序。',
     kcTitle: 'Best 无法访问 macOS 钥匙串', kcDetail: '服务器和订阅使用 macOS 钥匙串加密。“重试”会重新启动 Best；请在 macOS 提示中选择“始终允许”。如果钥匙串已被重置，“重新开始”会把旧数据原样保留在一旁。', kcRetry: '重试', kcEmpty: '重新开始',
     tunHelperPrompt: 'Best 想要安装其 TUN 辅助服务（TUN 模式会让所有系统流量通过隧道）。', tunHelperRemovePrompt: 'Best 想要移除其 TUN 辅助服务。',
     connected: '已连接', disconnected: '未连接', proxyOn: '开启系统代理', proxyOff: '关闭系统代理', connect: '连接', disconnect: '断开连接',

@@ -1304,7 +1304,9 @@ async function installAppUpdate() {
   appUpdateAbort = new AbortController();
   const signal = appUpdateAbort.signal;
   try {
-    const how = await appUpd.applyApp(updater, appUpdateInfo, PORTABLE, (p) => { appUpdate.progress = Math.round(p * 100); sendProgress('app', appUpdate.progress); }, signal);
+    const how = await appUpd.applyApp(updater, appUpdateInfo, PORTABLE, (p) => { appUpdate.progress = Math.round(p * 100); sendProgress('app', appUpdate.progress); }, signal,
+      // the small "Best is updating…" window shown while it installs, in the user's language
+      { ...trayI18n(settings.language), rtl: settings.language === 'fa' });
     if (how === 'manual') {
       // macOS, Best cannot replace itself where it runs: the checked new app waits in Downloads.
       cores.log('app', `Best ${appUpdateInfo.latest} verified and put in Downloads (this copy cannot replace itself here)`);

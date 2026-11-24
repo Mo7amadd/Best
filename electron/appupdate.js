@@ -18,6 +18,9 @@ const REPO_OK = /^[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}$/.test(REPO);
 const TAR = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
 const ROBOCOPY = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'Robocopy.exe');
 const PS = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+// The console host without a window: Windows Terminal (the default terminal of Windows 11) ignores
+// "-WindowStyle Hidden" and showed an empty terminal for as long as an update installed.
+const CONHOST = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'conhost.exe');
 
 // Versions: 1.0.3, or a test version of it such as 1.0.3-beta.2 (semantic versioning).
 const VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$/;
@@ -86,7 +89,7 @@ async function checkApp(updater, portable, beta = false) {
 }
 
 /** Download, verify and hand over to the installer / swap script. Resolves when Best should quit. */
-async function applyApp(updater, info, portable, onProgress, signal = null) {
+async function applyApp(updater, info, portable, onProgress, signal = null, texts = null) {
   // The size GitHub lists for the file (at most 800 MB) is the limit; slow connections get 40 minutes.
   // (Without the API the size is not known: then 800 MB.)
   const maxBytes = Math.min(Number(info.asset.size) || 800 * 1024 * 1024, 800 * 1024 * 1024) + 1024 * 1024;
@@ -116,7 +119,7 @@ async function applyApp(updater, info, portable, onProgress, signal = null) {
 
   if (!portable) {
     // 1) The updater task set up by the installer: no administrator prompt (see build/updater).
-    if (await viaUpdaterTask(file, info)) return true;
+    if (await viaUpdaterTask(file, info, texts)) return true;
     // 2) Otherwise the installer itself, which needs administrator rights (Program Files). WMI cannot
     // show the UAC prompt, so it refused to start it whenever Best ran as a standard user; Windows'
     // own ShellExecute shows the prompt, and the installer it starts is not tied to Best.
@@ -135,25 +138,30 @@ async function applyApp(updater, info, portable, onProgress, signal = null) {
   const script = [
     `$ErrorActionPreference = 'Stop'`,
     `$log = ${q(path.join(dir, 'update.log'))}`,
+    ...progressWindow(texts, info.latest, exe),
     'try {',
-    `  Wait-Process -Id ${process.pid} -Timeout 60 -ErrorAction SilentlyContinue`,
+    `  for ($i = 0; $i -lt 120 -and (Get-Process -Id ${process.pid} -ErrorAction SilentlyContinue); $i++) { Pump 500 }`,
     // Every Best.exe of this folder (renderer, GPU helper…) must be gone before files are replaced.
-    `  for ($i = 0; $i -lt 60; $i++) { $busy = Get-Process -Name Best -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith(${q(target + path.sep)}, [StringComparison]::OrdinalIgnoreCase) }; if (-not $busy) { break }; Start-Sleep -Seconds 1 }`,
-    '  Start-Sleep -Milliseconds 500',
+    `  for ($i = 0; $i -lt 60; $i++) { $busy = Get-Process -Name Best -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith(${q(target + path.sep)}, [StringComparison]::OrdinalIgnoreCase) }; if (-not $busy) { break }; Pump 1000 }`,
+    '  Pump 500',
     // Mirror the program files; the data folder and the portable marker stay as they are.
-    `  & ${q(ROBOCOPY)} ${q(src)} ${q(target)} /E /R:10 /W:1 /XD data /XF portable /NP /NFL /NDL *> $log`,
-    "  if ($LASTEXITCODE -ge 8) { throw \"robocopy failed with code $LASTEXITCODE\" }",
+    // (started on its own so the window keeps moving while the files are copied)
+    `  $copy = Start-Process -FilePath ${q(ROBOCOPY)} -ArgumentList @(${q(`"${src}"`)}, ${q(`"${target}"`)}, '/E', '/R:10', '/W:1', '/XD', 'data', '/XF', 'portable', '/NP', '/NFL', '/NDL') -NoNewWindow -PassThru -RedirectStandardOutput $log`,
+    '  while (-not $copy.HasExited) { Pump 200 }',
+    "  if ($copy.ExitCode -ge 8) { throw \"robocopy failed with code $($copy.ExitCode)\" }",
+    '  Done',
     `  Start-Process -FilePath ${q(exe)}`,
     `  Remove-Item -LiteralPath ${q(dir)} -Recurse -Force -ErrorAction SilentlyContinue`,
     '} catch {',
     // Whatever happened, the user gets Best back (the old files if nothing was copied); the log stays.
     "  \"$(Get-Date -Format s) $($_.Exception.Message)\" | Out-File -LiteralPath $log -Append -Encoding utf8",
+    '  Done',
     `  Start-Process -FilePath ${q(exe)}`,
     '}',
   ].join('\r\n');
   const file2 = path.join(dir, 'swap.ps1');
   fs.writeFileSync(file2, `﻿${script}`, 'utf8');
-  await launchIndependent(`"${PS}" -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "${file2}"`);
+  await launchIndependent(hiddenPs(file2));
   return true;
 }
 
@@ -171,7 +179,7 @@ function pendingFile() { return path.join(app.getPath('userData'), 'update-pendi
  * A small script, running as this user, waits for it and
  * opens Best again. False when the task is not there or cannot be started.
  */
-async function viaUpdaterTask(file, info) {
+async function viaUpdaterTask(file, info, texts) {
   if (!(await run(SCHTASKS, ['/Query', '/TN', TASK]))) return false;
   const incoming = path.join(process.env.ProgramData || 'C:\\ProgramData', 'Best', 'incoming');
   try { fs.copyFileSync(file, path.join(incoming, info.asset.name)); } catch { return false; }
@@ -180,20 +188,22 @@ async function viaUpdaterTask(file, info) {
   const q = (s) => `'${String(s).replace(/['‘’‚‛]/g, '$&$&')}'`;
   const script = [
     "$ErrorActionPreference = 'SilentlyContinue'",
+    ...progressWindow(texts, info.latest, process.execPath),
     '$t0 = Get-Date; $seen = $false',
     // Wait for the task to start and then to finish (at most 45 minutes), then open Best again.
     'while (((Get-Date) - $t0).TotalMinutes -lt 45) {',
     "  $s = (Get-ScheduledTask -TaskPath '\\Best\\' -TaskName 'Updater').State",
     "  if ($s -eq 'Running') { $seen = $true } elseif ($seen -or ((Get-Date) - $t0).TotalSeconds -gt 30) { break }",
-    '  Start-Sleep -Seconds 2',
+    '  Pump 2000',
     '}',
-    'Start-Sleep -Seconds 1',
+    'Pump 1000',
+    'Done',
     `Start-Process -FilePath ${q(process.execPath)}`,
     `Remove-Item -LiteralPath $PSCommandPath -Force`,
   ].join('\r\n');
   const f = path.join(os.tmpdir(), `best-restart-${process.pid}.ps1`);
   fs.writeFileSync(f, `﻿${script}`, 'utf8');
-  await launchIndependent(`"${PS}" -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "${f}"`);
+  await launchIndependent(hiddenPs(f));
   return true;
 }
 
@@ -205,6 +215,49 @@ function failedTaskUpdate() {
     // (the target may also be older: back from a test version to the official release)
     return p && VERSION.test(p.version) && p.version !== app.getVersion() ? p.version : '';
   } catch { return ''; }
+}
+
+/** A PowerShell script run with no console window at all (see CONHOST). */
+function hiddenPs(file) {
+  return `"${CONHOST}" --headless "${PS}" -NoProfile -NonInteractive -Sta -ExecutionPolicy Bypass -File "${file}"`;
+}
+
+/**
+ * PowerShell lines for the small Best window shown while an update installs: "Best is updating to
+ * version X…", a moving bar, and that it opens again by itself (in the user's language; texts from
+ * tray-i18n.js). Pump waits while keeping the window alive, Done closes it. Without texts, or when
+ * the window cannot be made, the script only waits, as before.
+ */
+function progressWindow(texts, version, exePath) {
+  const q = (v) => "'" + String(v).replace(/['‘’‚‛]/g, '$&$&') + "'";
+  const lines = [
+    '$form = $null',
+    'function Pump([int]$ms) { $end = (Get-Date).AddMilliseconds($ms); do { if ($form -and -not $form.IsDisposed) { [System.Windows.Forms.Application]::DoEvents() }; Start-Sleep -Milliseconds 50 } while ((Get-Date) -lt $end) }',
+    'function Done { if ($form -and -not $form.IsDisposed) { $form.Close(); $form.Dispose() } }',
+  ];
+  if (!texts || !texts.updBody) return lines;
+  return [...lines,
+    'try {',
+    '  Add-Type -AssemblyName System.Windows.Forms, System.Drawing',
+    '  [System.Windows.Forms.Application]::EnableVisualStyles()',
+    '  $form = New-Object System.Windows.Forms.Form',
+    "  $form.Text = 'Best'; $form.FormBorderStyle = 'FixedSingle'; $form.MaximizeBox = $false; $form.StartPosition = 'CenterScreen'; $form.TopMost = $true",
+    "  $form.ClientSize = New-Object System.Drawing.Size(440, 142); $form.Font = New-Object System.Drawing.Font('Segoe UI', 9)",
+    '  $form.BackColor = [System.Drawing.Color]::FromArgb(22, 25, 31); $form.ForeColor = [System.Drawing.Color]::FromArgb(230, 232, 235)',
+    '  try { $form.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon(' + q(exePath) + ') } catch { }',
+    ...(texts.rtl ? ["  $form.RightToLeft = 'Yes'; $form.RightToLeftLayout = $true"] : []),
+    '  $title = New-Object System.Windows.Forms.Label',
+    '  $title.Text = ' + q(String(texts.updBody).replace('{v}', version)) + "; $title.Font = New-Object System.Drawing.Font('Segoe UI', 11, [System.Drawing.FontStyle]::Bold)",
+    '  $title.Location = New-Object System.Drawing.Point(24, 20); $title.Size = New-Object System.Drawing.Size(392, 26)',
+    '  $note = New-Object System.Windows.Forms.Label',
+    '  $note.Text = ' + q(texts.updDetail) + '; $note.ForeColor = [System.Drawing.Color]::FromArgb(154, 163, 173)',
+    '  $note.Location = New-Object System.Drawing.Point(24, 50); $note.Size = New-Object System.Drawing.Size(392, 40)',
+    '  $bar = New-Object System.Windows.Forms.ProgressBar',
+    "  $bar.Style = 'Marquee'; $bar.MarqueeAnimationSpeed = 25; $bar.Location = New-Object System.Drawing.Point(24, 102); $bar.Size = New-Object System.Drawing.Size(392, 8)",
+    '  $form.Controls.AddRange(@($title, $note, $bar))',
+    '  $form.Show(); [System.Windows.Forms.Application]::DoEvents()',
+    '} catch { $form = $null }',
+  ];
 }
 
 /**
