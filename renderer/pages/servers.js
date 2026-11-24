@@ -572,10 +572,10 @@ function subInfo(sub) {
 }
 
 /** Panel links (support / web page): opened in the browser only on click. */
-export function subLinks(sub) {
+export function subLinks(sub, { variant = 'ghost' } = {}) {
   return [
-    sub.supportUrl ? button(t('sub_support'), { size: 'sm', variant: 'ghost', icon: 'info', title: sub.supportUrl, onClick: () => api.openSubLink(sub.id, 'support') }) : null,
-    sub.webPageUrl ? button(t('sub_webPage'), { size: 'sm', variant: 'ghost', icon: 'globe', title: sub.webPageUrl, onClick: () => api.openSubLink(sub.id, 'web') }) : null,
+    sub.supportUrl ? button(t('sub_support'), { size: 'sm', variant, icon: 'info', title: sub.supportUrl, onClick: () => api.openSubLink(sub.id, 'support') }) : null,
+    sub.webPageUrl ? button(t('sub_webPage'), { size: 'sm', variant, icon: 'globe', title: sub.webPageUrl, onClick: () => api.openSubLink(sub.id, 'web') }) : null,
   ];
 }
 

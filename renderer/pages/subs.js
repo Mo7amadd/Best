@@ -118,11 +118,12 @@ function subCard(sub) {
       : h('div', { class: 'usage-bar unlimited', style: { width: '100%' }, title: t('unlimited') }, h('span')),
     sub.error ? h('div', { class: 'sub-err' }, subError(sub.error)) : null,
     subNotices(sub),
-    sub.supportUrl || sub.webPageUrl ? h('div', { class: 'row' }, subLinks(sub)) : null,
+    // The panel's support / web page links sit in the same row as the other buttons (before Delete).
     h('div', { class: 'sub-actions' },
       updBtn,
       button(t('nav_servers'), { size: 'sm', icon: 'servers', onClick: () => { ui.group = sub.id; localSet('group', sub.id); go('servers'); } }),
       button(t('edit'), { size: 'sm', icon: 'edit', onClick: () => openSubEditor(sub.id) }),
+      ...subLinks(sub, { variant: '' }),
       button(t('delete'), { size: 'sm', icon: 'trash', variant: 'danger', onClick: () => removeSub(sub) })));
 }
 
