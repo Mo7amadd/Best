@@ -133,6 +133,9 @@ try {
   // Wait until `test(value)` holds (or `ms` passed) instead of a fixed time: the menu marker and the
   // smooth scroll take longer on slow machines (the GitHub Macs). Returns the last value.
   const settle = async (get, test, ms = 5000) => { let v = await get(); for (let t = 0; t < ms && !test(v); t += 150) { await wait(150); v = await get(); } return v; };
+  // The smooth scroll of a search result may still be running after its check passed: wait until
+  // the page stands still, so it cannot move the page of the next check.
+  const scrollStill = async () => { let a = -1; for (let i = 0; i < 40; i++) { const b = await ev(`document.querySelector('[data-scroll=page-settings]')?.scrollTop ?? 0`); if (b === a) return; a = b; await wait(120); } };
   const setView = () => ev(`(() => {
     const page = document.querySelector('${SP}');
     const m = document.querySelector('.set-nav .subs.open .sub-marker');
@@ -332,6 +335,7 @@ try {
     assert(r.top >= 0 && r.bottom <= r.h, 'highlighted setting is not on screen');
     assert(!r.list, 'result list still open');
     await ev(`(() => { const i = document.querySelector('.set-find input'); i.value = ''; i.blur(); })()`);
+    await scrollStill();
   });
 
   await check('settings search: a setting inside a closed "Advanced" box — Enter opens its page and the box, and it glows', async () => {
@@ -348,6 +352,7 @@ try {
     assert(r && r.open && r.top >= 0 && r.bottom <= r.h, `highlight ${JSON.stringify(r)}`);
     await ev(`(() => { const i = document.querySelector('.set-find input'); i.value = ''; i.blur(); })()`);
     await ev(`document.querySelector('.adv[data-adv=tun] .adv-head').click()`);
+    await scrollStill();
   });
 
   await check('settings: Ctrl+F puts the cursor in the settings search without moving the page; Escape leaves it', async () => {
