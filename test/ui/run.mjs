@@ -897,6 +897,35 @@ try {
     await ev(`[...document.querySelectorAll('aside .nav-btn')][0].click()`); await wait(300);
   });
 
+  // Three separate things on the servers page: the row number, hidden addresses keeping their
+  // size, and the exit IP copied by a click.
+  await check('server list: a row number column, numbered in the shown order, can be hidden from the header menu', async () => {
+    await ev(`best.importText('vless://b831381d-6324-4d53-ad4f-8cda48b30811@127.0.0.1:11?security=none&type=tcp#ui-num-a\\nvless://b831381d-6324-4d53-ad4f-8cda48b30811@127.0.0.1:12?security=none&type=tcp#ui-num-b')`);
+    await ev(`[...document.querySelectorAll('aside .nav-btn')][0].click()`); await wait(500);
+    const nums = await ev(`[...document.querySelectorAll('.srow .cell-num')].map((c) => c.textContent)`);
+    const n = nums.length;
+    assert(n >= 2, 'no row numbers');
+    const want = await ev(`import(new URL('i18n.js', document.baseURI).href).then((m) => [...Array(${n})].map((_, i) => m.num(i + 1)))`);
+    assert(JSON.stringify(nums) === JSON.stringify(want), `numbers ${nums.join(',')}`);
+    assert((await ev(`document.querySelector('.thead .th-num')?.textContent`)) === '#', 'no # header');
+    // Numbers line up: every number cell has the same left and right edge.
+    const edges = await ev(`[...document.querySelectorAll('.srow .cell-num')].map((c) => { const r = c.getBoundingClientRect(); return Math.round(r.left) + ':' + Math.round(r.right); })`);
+    assert(new Set(edges).size === 1, 'numbers not aligned: ' + [...new Set(edges)].join(' '));
+    // Hidden with the header's column menu (right click), then shown again.
+    const th = await ev(`(() => { const r = document.querySelector('.thead').getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+    const label = await ev(`import(new URL('i18n.js', document.baseURI).href).then((m) => m.t('col_num_menu'))`);
+    for (const shown of [false, true]) {
+      await move(th[0], th[1], 3);
+      await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: th[0], y: th[1], button: 'right', clickCount: 1 });
+      await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: th[0], y: th[1], button: 'right', clickCount: 1 });
+      await wait(300);
+      const it = await ev(`(() => { const b = [...document.querySelectorAll('.menu .menu-item')].find((x) => x.textContent.includes(${JSON.stringify(label)})); if (!b) return null; const r = b.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+      assert(it, 'row number missing from the column menu');
+      await click(it[0], it[1]); await wait(600);
+      assert((await ev(`Boolean(document.querySelector('.srow .cell-num'))`)) === shown, shown ? 'did not come back' : 'not hidden');
+    }
+  });
+
   await check('server editor opens and closes', async () => {
     await ev(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN', key: 'n', ${CMD_PROP}: true, bubbles: true }))`); await wait(500);
     assert(await ev(`Boolean(document.querySelector('.overlay, .drawer'))`), 'editor did not open');

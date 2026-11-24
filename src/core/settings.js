@@ -177,7 +177,7 @@ function sanitizeSettings(input) {
   out.webdavPass = cleanText(src.webdavPass, 256);
   out.webdavDir = /^[\w .-]{1,64}$/.test(String(src.webdavDir || '')) ? String(src.webdavDir) : 'Best';
   out.uiZoom = [0.9, 1, 1.1, 1.25].includes(Number(src.uiZoom)) ? Number(src.uiZoom) : 1;
-  out.hiddenCols = (Array.isArray(src.hiddenCols) ? src.hiddenCols : []).filter((c) => ['address', 'port', 'protocol', 'delay', 'speed'].includes(c));
+  out.hiddenCols = (Array.isArray(src.hiddenCols) ? src.hiddenCols : []).filter((c) => ['num', 'address', 'port', 'protocol', 'delay', 'speed'].includes(c));
   const coreFor = src.coreFor && typeof src.coreFor === 'object' ? src.coreFor : {};
   out.coreFor = Object.fromEntries(Object.entries(coreFor).filter(([k, v]) => /^[a-z0-9]{2,12}$/.test(k) && ['xray', 'sing-box', 'mihomo'].includes(v)));
   out.tunExclude = String(src.tunExclude || '').split(/[\s,]+/).filter((x) => /^[0-9a-fA-F:.]{2,45}(\/\d{1,3})?$/.test(x)).slice(0, 200).join('\n');

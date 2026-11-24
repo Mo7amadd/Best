@@ -168,18 +168,19 @@ function transportText(s) {
 
 // Columns: the user can hide any but the name (header right-click or Settings); widths follow the window.
 const COL_WIDTH = {
-  name: 'minmax(170px, 1.7fr)', address: 'minmax(110px, 1.3fr)', port: 'minmax(56px, .5fr)', protocol: 'minmax(130px, 1.1fr)',
+  // num: as wide as the longest number of this list (every row is its own grid, so not 'auto')
+  num: '3ch', name: 'minmax(170px, 1.7fr)', address: 'minmax(110px, 1.3fr)', port: 'minmax(56px, .5fr)', protocol: 'minmax(130px, 1.1fr)',
   delay: 'minmax(150px, 1.15fr)', udp: 'minmax(70px, .6fr)', speed: 'minmax(80px, .8fr)',
 };
-const OPTIONAL_COLS = ['address', 'port', 'protocol', 'delay', 'speed'];
+const OPTIONAL_COLS = ['num', 'address', 'port', 'protocol', 'delay', 'speed'];
 function visibleCols(udp) {
   const hidden = new Set(S.settings.hiddenCols || []);
-  return ['name', ...['address', 'port', 'protocol', 'delay'].filter((c) => !hidden.has(c)), ...(udp ? ['udp'] : []), ...(hidden.has('speed') ? [] : ['speed'])];
+  return [...(hidden.has('num') ? [] : ['num']), 'name', ...['address', 'port', 'protocol', 'delay'].filter((c) => !hidden.has(c)), ...(udp ? ['udp'] : []), ...(hidden.has('speed') ? [] : ['speed'])];
 }
 export function columnsMenu(at) {
   const hidden = new Set(S.settings.hiddenCols || []);
   showMenu(at, OPTIONAL_COLS.map((c) => ({
-    label: t(c === 'address' ? 'col_address' : `col_${c}`), icon: hidden.has(c) ? null : 'check', checked: !hidden.has(c),
+    label: t(c === 'address' ? 'col_address' : c === 'num' ? 'col_num_menu' : `col_${c}`), icon: hidden.has(c) ? null : 'check', checked: !hidden.has(c),
     onClick: () => { if (hidden.has(c)) hidden.delete(c); else hidden.add(c); run(() => api.setSettings({ hiddenCols: [...hidden] })); },
   })));
 }
@@ -188,7 +189,7 @@ export function columnsMenu(at) {
 let dragId = '';
 const canDrag = () => !ui.sort.key && !ui.query.trim();
 
-function row(s, list, udp) {
+function row(s, list, udp, pos) {
   const cols = visibleCols(udp);
   const isActive = s.id === S.activeId;
   const sub = s.subId ? S.subs.find((x) => x.id === s.subId) : null;
@@ -209,7 +210,7 @@ function row(s, list, udp) {
     onDragleave: (e) => e.currentTarget.classList.remove('drop-before'),
     onDrop: (e) => { e.preventDefault(); e.currentTarget.classList.remove('drop-before'); if (dragId && dragId !== s.id) run(() => api.moveServer(dragId, `before:${s.id}`)); dragId = ''; },
   },
-  ...cellsOf(s, sub, isActive, cols));
+  ...cellsOf(s, sub, isActive, cols, pos));
 }
 
 // --------------------------------------------------------------------------- virtual list
@@ -220,13 +221,13 @@ const OVERSCAN = 15;
 const vw = { start: 0, end: 60, rowH: 43, gap: 2 }; // rowH = distance from one row to the next
 
 function rowsWindow(list, udp) {
-  if (list.length <= VIRTUAL_MIN) return list.map((s) => row(s, list, udp));
+  if (list.length <= VIRTUAL_MIN) return list.map((s, i) => row(s, list, udp, i + 1));
   const start = Math.max(0, Math.min(vw.start, list.length - 1));
   const end = Math.min(list.length, Math.max(vw.end, start + 1));
   requestAnimationFrame(() => { if (updateWindow()) vrender(); }); // the list or the window size may have changed
   return [
     h('div', { class: 'vspace', 'data-key': 'v-top', 'aria-hidden': 'true', style: { height: `${Math.max(0, start * vw.rowH - vw.gap)}px` } }),
-    ...list.slice(start, end).map((s) => row(s, list, udp)),
+    ...list.slice(start, end).map((s, i) => row(s, list, udp, start + i + 1)),
     h('div', { class: 'vspace', 'data-key': 'v-bot', 'aria-hidden': 'true', style: { height: `${Math.max(0, (list.length - end) * vw.rowH - vw.gap)}px` } }),
   ];
 }
@@ -299,8 +300,10 @@ function revealRow(id, list) {
   if (el) { el.focus(); el.scrollIntoView({ block: 'nearest' }); }
 }
 
-function cellsOf(s, sub, isActive, cols) {
+function cellsOf(s, sub, isActive, cols, pos) {
   const cell = {
+  // Its place in the list as it is shown (after sorting / searching).
+  num: () => h('span', { class: 'cell-num', role: 'cell' }, pos ? num(pos) : ''),
   name: () => h('span', { class: 'cell-name', role: 'cell' },
     h('span', { class: 'n1', title: serverName(s) }, serverName(s)),
     ui.group === 'all' ? h('span', { class: 'n2' }, sub ? sub.name : t('group_manual')) : null,
@@ -665,6 +668,7 @@ function serversCard() {
     const udp = showUdp();
     const cols = visibleCols(udp);
     const head = {
+      num: () => h('span', { role: 'columnheader', class: 'th-num', title: t('col_num_menu') }, '#'),
       name: () => h('span', { role: 'columnheader' }, sortHeader('name', t('col_name'))),
       address: () => h('span', { role: 'columnheader', class: 'th-addr' }, t('col_address'),
           h('button', {
@@ -678,7 +682,7 @@ function serversCard() {
       udp: () => h('span', { role: 'columnheader', title: t('udp_help') }, sortHeader('udp', t('col_udp'))),
       speed: () => h('span', { role: 'columnheader' }, sortHeader('speed', t('col_speed'))),
     };
-    content = h('div', { class: `table ${udp ? 'has-udp' : ''}`, role: 'table', 'aria-label': t('nav_servers'), style: { '--cols': cols.map((c) => COL_WIDTH[c]).join(' ') } },
+    content = h('div', { class: `table ${udp ? 'has-udp' : ''}`, role: 'table', 'aria-label': t('nav_servers'), style: { '--cols': cols.map((c) => (c === 'num' ? `calc(${Math.max(2, String(list.length).length)}ch + 4px)` : COL_WIDTH[c])).join(' ') } },
       h('div', { class: 'trow thead', role: 'row', title: t('cols_hint'), onContextmenu: (e) => { e.preventDefault(); columnsMenu({ x: e.clientX, y: e.clientY }); } }, ...cols.map((c) => head[c]())),
       rowsWindow(list, udp));
   }

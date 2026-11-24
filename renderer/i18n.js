@@ -4,6 +4,7 @@
 import { MAC } from './i18n-mac.js';
 
 const fa = {
+  col_num_menu: 'شماره‌ی ردیف',
   sub_preResolve: 'پیش‌حل اسم سرورها', sub_preResolve_off: 'خاموش', sub_preResolve_system: 'DNS همین کامپیوتر', sub_preResolve_help: 'با هر به‌روزرسانی، اسم سرورها با این DNS به IP تبدیل می‌شود (برای پنل‌هایی که نشانی ورودی را با DNS خودشان می‌دهند، یا وقتی DNS شبکه جواب‌ها را عوض می‌کند). اسم برای TLS و Host می‌ماند. اگر جوابی نیاید، همان اسم می‌ماند.',
   NO_VALID_SERVERS: 'هیچ‌کدام از لینک‌های این اشتراک خوانده نشد (شاید پروتکلی که Best نمی‌شناسد)؛ سرورهای قبلی سر جایشان ماندند.',
   f_hopInterval: 'فاصله‌ی پرش پورت (ثانیه)', f_hopInterval_help: 'هر چند ثانیه پورت عوض شود؛ یک عدد یا بازه مثل 5-15 (کمترین ۵). خالی = پیش‌فرض هسته (۳۰).',
@@ -177,6 +178,7 @@ const fa = {
 };
 
 const en = {
+  col_num_menu: 'Row number',
   sub_preResolve: 'Pre-resolve server names', sub_preResolve_off: 'Off', sub_preResolve_system: 'This computer’s DNS', sub_preResolve_help: 'On every update the server names are turned into IPs with this DNS (for panels that give their entry addresses through their own DNS, or when the network’s DNS changes answers). The name stays for TLS and Host. Without an answer the name stays.',
   NO_VALID_SERVERS: 'None of the links in this subscription could be read (perhaps a protocol Best does not know); the previous servers were kept.',
   f_hopInterval: 'Port hop interval (seconds)', f_hopInterval_help: 'How often the port changes: one number or a range such as 5-15 (at least 5). Empty = the core default (30).',
@@ -341,6 +343,7 @@ const en = {
 };
 
 const ru = {
+  col_num_menu: 'Номер строки',
   sub_preResolve: 'Заранее разрешать имена серверов', sub_preResolve_off: 'Выкл.', sub_preResolve_system: 'DNS этого компьютера', sub_preResolve_help: 'При каждом обновлении имена серверов превращаются в IP через этот DNS (для панелей, выдающих адреса входа через свой DNS, или когда DNS сети подменяет ответы). Имя остаётся для TLS и Host. Если ответа нет, имя остаётся.',
   NO_VALID_SERVERS: 'Ни одну ссылку этой подписки не удалось прочитать (возможно, протокол, который Best не знает); прежние серверы сохранены.',
   f_hopInterval: 'Интервал смены порта (с)', f_hopInterval_help: 'Как часто меняется порт: одно число или диапазон, например 5-15 (не меньше 5). Пусто — по умолчанию ядра (30).',
@@ -505,6 +508,7 @@ const ru = {
 };
 
 const zh = {
+  col_num_menu: '行号',
   sub_preResolve: '预解析服务器名称',
   sub_preResolve_off: '关闭',
   sub_preResolve_system: '本机 DNS',
