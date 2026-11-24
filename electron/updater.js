@@ -6,8 +6,11 @@
 //  - Updated files live in the user's profile; the copies bundled with Best are never modified,
 //    so "Restore bundled version" always works.
 //  - Elevated (TUN) runs never execute a core from a folder a normal program could write to: with
-//    the all-users install (Program Files) they use the bundled cores or updates stored next to
-//    them (resources\cores-updated), which only an administrator can change.
+//    the all-users install (Program Files) they use the bundled cores or updates stored in
+//    Program Files\Best Updater\cores, which only an administrator can change. That folder is not
+//    inside the install folder: an app update (the installer removes the whole install folder
+//    first) used to delete mihomo and the updated cores installed while Best ran as administrator.
+//    The installer leaves Best Updater alone on updates and removes it on a real uninstall.
 //  - A core is replaced by moving the old file aside, never by stopping it: a running TUN keeps
 //    its (old) executable and is not interrupted.
 
@@ -106,7 +109,12 @@ function protectedInstall() {
   return [process.env.ProgramW6432, process.env.ProgramFiles, process.env['ProgramFiles(x86)']]
     .filter(Boolean).some((r) => here.startsWith(path.resolve(r).toLowerCase() + path.sep));
 }
-function protectedCoresDir() { return path.join(process.resourcesPath, 'cores-updated'); }
+function protectedCoresDir() {
+  // Program Files of this (64-bit) system, as the installer's $PROGRAMFILES64: a folder only
+  // administrators can write to, outside the install folder that every app update replaces.
+  const pf = process.env.ProgramW6432 || process.env.ProgramFiles || path.join(process.env.SystemDrive || 'C:', 'Program Files');
+  return path.join(pf, 'Best Updater', 'cores');
+}
 /** Admin-only locations are used when elevated in a Program Files install. */
 function adminOnly() { return elevated && protectedInstall(); }
 /**
