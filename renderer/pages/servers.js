@@ -93,7 +93,14 @@ function exitIpChip() {
   let value;
   if (!x || x.checking) value = h('span', { class: 'dim' }, h('span', { class: 'spinner xs' }), ' ', t('exitIp_checking'));
   else if (x.error) value = h('span', { class: 'dim', title: x.error }, t('exitIp_unknown'));
-  else value = h('span', { class: 'exit-ip', title: x.cc ? countryName(x.cc) : '' }, x.cc ? `${flagOf(x.cc)} ` : '', h('bdi', { dir: 'ltr', class: 'ltr mono' }, ui.hideAddr ? maskAddress(x.ip) : x.ip));
+  else {
+    // A click copies the address (also while addresses are hidden: the user asked for it).
+    const tip = `${x.cc ? `${countryName(x.cc)} · ` : ''}${t('exitIp_copy')}`;
+    value = h('button', {
+      type: 'button', class: 'exit-ip', title: tip, 'aria-label': `${t('exitIp')}: ${tip}`,
+      onClick: async () => { await api.copy(x.ip); toast(t('copied'), 'success'); },
+    }, x.cc ? `${flagOf(x.cc)} ` : '', h('bdi', { dir: 'ltr', class: 'ltr mono' }, ui.hideAddr ? maskAddress(x.ip) : x.ip));
+  }
   return h('span', { class: 'exit-ip-line' }, h('span', { class: 'dim' }, `${t('exitIp')}:`), value, refresh);
 }
 

@@ -784,3 +784,7 @@ html .num-box > input.input[type="number"], html[dir] .num-box > input.input[typ
    chip and the exit IP) the stand-in, of the same length, keeps that font, so nothing around it
    moves or wraps differently when addresses are hidden or shown. */
 .mono .blurred { font-family: inherit; font-size: inherit; font-weight: inherit; letter-spacing: inherit; padding-inline: 0; }
+/* The exit IP is a button (a click copies it) that looks like the text it was. */
+button.exit-ip { padding: 0 2px; margin: 0 -2px; border: 0; border-radius: 4px; background: none; font: inherit; color: var(--text); cursor: copy; }
+button.exit-ip:hover { background: var(--surface-2); }
+button.exit-ip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

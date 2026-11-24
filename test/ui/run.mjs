@@ -941,6 +941,32 @@ try {
     assert(!leaks, 'a hidden address is still in the page');
   });
 
+  await check('clicking the exit IP copies it (also while hidden) and says so', async () => {
+    await ev(`best.importText('vless://b831381d-6324-4d53-ad4f-8cda48b30811@127.0.0.1:13?security=none&type=tcp#ui-exit')`);
+    await ev(`[...document.querySelectorAll('aside .nav-btn')][0].click()`); await wait(400);
+    // The clipboard is read in the main process (the page may not read it); it answers with a promise.
+    const target = (await (await fetch(`http://127.0.0.1:${mainPort}/json`)).json())[0];
+    const mws = new WebSocket(target.webSocketDebuggerUrl);
+    await new Promise((r, j) => { mws.addEventListener('open', r); mws.addEventListener('error', j); });
+    let mid = 0;
+    const inMain = (expression) => new Promise((r) => { const n = ++mid; const on = (m) => { const msg = JSON.parse(m.data); if (msg.id === n) { mws.removeEventListener('message', on); r(msg.result && msg.result.result && msg.result.result.value); } }; mws.addEventListener('message', on); mws.send(JSON.stringify({ id: n, method: 'Runtime.evaluate', params: { expression, includeCommandLineAPI: true, returnByValue: true, awaitPromise: true } })); });
+    try {
+    for (const hide of [false, true]) {
+      await ev(`(async () => { const m = await import(new URL('app.js', document.baseURI).href); const s = await best.getState(); const a = s.servers[0]; m.S.activeId = a.id; m.S.core = { ...m.S.core, running: true, serverId: a.id, core: 'xray' }; m.S.exitInfo = { ip: '206.189.15.19', cc: 'NL' }; m.ui.hideAddr = ${hide}; m.render(); })()`); await wait(300);
+      await inMain("require('electron').clipboard.writeText('nothing yet')");
+      const p = await ev(`(() => { const b = document.querySelector('.card.conn button.exit-ip'); if (!b) return null; const r = b.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+      assert(p, 'the exit IP is not a button');
+      await click(p[0], p[1]); await wait(400);
+      const clip = await inMain("require('electron').clipboard.readText()");
+      assert(clip === '206.189.15.19', `clipboard has ${JSON.stringify(clip)} (hidden=${hide})`);
+      assert(await ev(`Boolean(document.querySelector('.toast'))`), 'no "copied" message');
+    }
+    } finally {
+      mws.close();
+      await ev(`(async () => { const m = await import(new URL('app.js', document.baseURI).href); m.ui.hideAddr = false; m.S.core = { ...m.S.core, running: false, serverId: '' }; m.render(); })()`);
+    }
+  });
+
   await check('server editor opens and closes', async () => {
     await ev(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN', key: 'n', ${CMD_PROP}: true, bubbles: true }))`); await wait(500);
     assert(await ev(`Boolean(document.querySelector('.overlay, .drawer'))`), 'editor did not open');
