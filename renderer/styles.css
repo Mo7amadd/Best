@@ -788,3 +788,7 @@ html .num-box > input.input[type="number"], html[dir] .num-box > input.input[typ
 button.exit-ip { padding: 0 2px; margin: 0 -2px; border: 0; border-radius: 4px; background: none; font: inherit; color: var(--text); cursor: copy; }
 button.exit-ip:hover { background: var(--surface-2); }
 button.exit-ip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Download, upload and "this connection" a little closer together. The speeds keep a minimum
+   width (room for "999.9 KB/s") so the line does not jump while the numbers change. */
+.conn-stats { column-gap: 12px; }
+.conn-stats .rate b { min-width: 76px; }
