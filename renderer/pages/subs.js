@@ -121,10 +121,21 @@ function subCard(sub) {
     // The panel's support / web page links sit in the same row as the other buttons (before Delete).
     h('div', { class: 'sub-actions' },
       updBtn,
-      button(t('nav_servers'), { size: 'sm', icon: 'servers', onClick: () => { ui.group = sub.id; localSet('group', sub.id); go('servers'); } }),
-      button(t('edit'), { size: 'sm', icon: 'edit', onClick: () => openSubEditor(sub.id) }),
-      ...subLinks(sub, { variant: '' }),
+      // One row, always: in a narrow card the text of these buttons gives way to their icon
+      // (styles.css, container queries); their name stays as tooltip and for screen readers.
+      shrink(button(t('nav_servers'), { size: 'sm', icon: 'servers', ariaLabel: t('nav_servers'), onClick: () => { ui.group = sub.id; localSet('group', sub.id); go('servers'); } }), 'shrink-2'),
+      shrink(button(t('edit'), { size: 'sm', icon: 'edit', ariaLabel: t('edit'), onClick: () => openSubEditor(sub.id) }), 'shrink-2'),
+      ...subLinks(sub, { variant: '' }).filter(Boolean).map((b) => shrink(b, 'shrink-1')),
       button(t('delete'), { size: 'sm', icon: 'trash', variant: 'danger', onClick: () => removeSub(sub) })));
+}
+
+/** A button whose text may be hidden when the card is narrow (`level` 1 goes first, then 2). */
+function shrink(btn, level) {
+  btn.classList.add(level);
+  const label = btn.textContent.trim();
+  if (!btn.getAttribute('aria-label')) btn.setAttribute('aria-label', label);
+  btn.title = btn.title && btn.title !== label ? `${label} — ${btn.title}` : label;
+  return btn;
 }
 
 export function renderSubs() {

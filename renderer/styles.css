@@ -792,9 +792,13 @@ button.exit-ip:focus-visible { outline: 2px solid var(--accent); outline-offset:
    width (room for "999.9 KB/s") so the line does not jump while the numbers change. */
 .conn-stats { column-gap: 12px; }
 .conn-stats .rate b { min-width: 76px; }
-/* Subscription cards: the action row may take a second line when the panel's support / web page
-   buttons are in it too. */
-.sub-actions { flex-wrap: wrap; }
 /* Subscription cards: side by side whenever two fit (never one under the other with room to
    spare), and narrower on wide windows (more, smaller columns instead of two wide cards). */
 .sub-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr)); }
+/* Subscription card buttons stay on one row: when the card is too narrow for every label, the
+   panel's support / web page buttons show only their icon, then Servers and Edit as well
+   (Update and Delete always keep their words). */
+.sub-card { container-type: inline-size; }
+.sub-actions { flex-wrap: nowrap; }
+@container (max-width: 600px) { .sub-actions .shrink-1 > span { display: none; } }
+@container (max-width: 470px) { .sub-actions .shrink-2 > span { display: none; } }
