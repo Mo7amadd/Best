@@ -780,3 +780,7 @@ html .num-box > input.input[type="number"], html[dir] .num-box > input.input[typ
 .cell-num { display: block; text-align: start; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--text-4); white-space: nowrap; overflow: hidden; }
 .srow.active .cell-num, .srow.sel .cell-num { color: var(--text-3); }
 .th-num { text-align: start; color: var(--text-4); }
+/* A hidden address takes exactly the room of the real one: inside monospaced text (the address
+   chip and the exit IP) the stand-in, of the same length, keeps that font, so nothing around it
+   moves or wraps differently when addresses are hidden or shown. */
+.mono .blurred { font-family: inherit; font-size: inherit; font-weight: inherit; letter-spacing: inherit; padding-inline: 0; }

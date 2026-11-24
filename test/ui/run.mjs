@@ -926,6 +926,21 @@ try {
     }
   });
 
+  await check('hidden addresses keep the size of the real ones (connection card): nothing moves', async () => {
+    const measure = () => ev(`(() => { const c = document.querySelector('.card.conn'); const chip = [...c.querySelectorAll('.conn-tags .chip')].find((x) => x.querySelector('bdi')); const ip = c.querySelector('.exit-ip bdi'); return [Math.round(chip.getBoundingClientRect().width), Math.round(ip.getBoundingClientRect().width), Math.round(c.getBoundingClientRect().height), Math.round(ip.getBoundingClientRect().top)].join(','); })()`);
+    const set = (hide) => ev(`(async () => { const m = await import(new URL('app.js', document.baseURI).href); const s = await best.getState(); const a = s.servers.find((x) => x.remark === 'ui-num-a'); m.S.activeId = a.id; m.S.core = { ...m.S.core, running: true, serverId: a.id, core: 'xray' }; m.S.exitInfo = { ip: '206.189.15.19', cc: 'NL' }; m.ui.hideAddr = ${hide}; m.render(); })()`);
+    await set(false); await wait(400);
+    const shown = await measure();
+    await set(true); await wait(400);
+    const hidden = await measure();
+    // The real addresses are not in the address chip or the exit IP while hidden (the proxy help
+    // under the buttons names 127.0.0.1 on purpose, so only those two are looked at).
+    const leaks = await ev(`(() => { const c = document.querySelector('.card.conn'); const chip = [...c.querySelectorAll('.conn-tags .chip')].find((x) => x.querySelector('bdi')); return (chip.textContent + c.querySelector('.exit-ip').textContent).match(/127\.0\.0\.1|206\.189/) !== null; })()`);
+    await set(false); await wait(300);
+    assert(shown === hidden, `sizes changed: shown ${shown}, hidden ${hidden}`);
+    assert(!leaks, 'a hidden address is still in the page');
+  });
+
   await check('server editor opens and closes', async () => {
     await ev(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN', key: 'n', ${CMD_PROP}: true, bubbles: true }))`); await wait(500);
     assert(await ev(`Boolean(document.querySelector('.overlay, .drawer'))`), 'editor did not open');
