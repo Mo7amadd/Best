@@ -36,7 +36,11 @@ export async function applyAll() {
 
 function statusOf(item, id) {
   if (!item) return h('span', { class: 'dim' }, '—');
-  if (item.optional && !item.installed && !item.busy) return h('span', { class: 'dim' }, t('upd_notInstalled'));
+  if (item.optional && !item.installed && !item.busy) {
+    // mihomo installed in a run without administrator rights: not usable in this run (see mihomoUserOnly)
+    if (id === 'mihomo' && S.mihomoUserOnly) return h('span', { class: 'upd-err', title: t('upd_mihomoUserOnly') }, icon('alert', 14), t('mihomo_userOnly'));
+    return h('span', { class: 'dim' }, t('upd_notInstalled'));
+  }
   if (item.busy) {
     return h('div', { class: 'upd-progress', 'data-progress': id || '' },
       h('span', { class: 'spinner' }),

@@ -28,7 +28,7 @@ const { CoreManager } = require('./cores');
 const { applySystemProxy } = require('./sysproxy');
 const { PacServer } = require('./pac');
 const tester = require('./tester');
-const { Updater, extInstalled, mihomoInstalled, setElevated, cleanupOldCores, protectedInstall, allCoreExes } = require('./updater');
+const { Updater, extInstalled, mihomoInstalled, mihomoUserOnly, setElevated, cleanupOldCores, protectedInstall, allCoreExes } = require('./updater');
 const trayI18n = require('./tray-i18n');
 const { normalizeServer, toLink, serverKey, sameConnection, transportLabel, customInboundPorts, parseLink } = require('../src/core/links');
 const { parseContent, parseUserInfo, splitInfoNodes, updateOutcome } = require('../src/core/subscription');
@@ -306,6 +306,7 @@ function snapshot() {
     // macOS: TUN never runs the cores from a user folder as root (it will use its helper's own copy).
     secureCores: !app.isPackaged || IS_MAC || protectedInstall(),
     mihomo: mihomoInstalled(),
+    mihomoUserOnly: mihomoUserOnly(), // installed, but only for runs without administrator rights
     version: app.getVersion(),
     defaults: DEFAULT_SETTINGS, // Settings marks what differs from these
   };

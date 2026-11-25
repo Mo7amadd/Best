@@ -131,6 +131,14 @@ const exeName = (core) => platformExeName(core);
 const coreOfId = (id) => (id === 'singbox' ? 'sing-box' : id);
 /** Is the optional mihomo core installed? */
 function mihomoInstalled() { return fs.existsSync(coreExe('mihomo')); }
+/**
+ * mihomo installed only in the user's folder while Best runs as administrator: it is there but not
+ * used (a core in a folder any program can change never runs elevated), so it must be installed
+ * again from Updates — then it goes to Best Updater\cores and works in both modes.
+ */
+function mihomoUserOnly() {
+  return adminOnly() && !mihomoInstalled() && fs.existsSync(path.join(userCoresDir(), coreSub('mihomo'), exeName('mihomo')));
+}
 function userGeoDir() { return path.join(app.getPath('userData'), 'geo'); }
 
 /** Path of the core executable that will be used (an updated copy wins over the bundled one). */
@@ -652,4 +660,4 @@ class Updater extends EventEmitter {
   }
 }
 
-module.exports = { tagFromReleaseUrl, tagsFromAtom, digestFromSumFile, downloadUrl, mihomoInstalled, Updater, coreExe, geoDir, extInstalled, COMPONENTS, setElevated, allCoreExes, cleanupOldCores, protectedInstall, adminOnly, runRoot };
+module.exports = { tagFromReleaseUrl, tagsFromAtom, digestFromSumFile, downloadUrl, mihomoInstalled, mihomoUserOnly, Updater, coreExe, geoDir, extInstalled, COMPONENTS, setElevated, allCoreExes, cleanupOldCores, protectedInstall, adminOnly, runRoot };

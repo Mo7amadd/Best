@@ -640,7 +640,7 @@ function buildPages() {
           switchRow('sniffing', t('sniffing')),
           adv('cores', t('adv_cores'),
             h('div', { class: 'grid2' }, ['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria2', 'tuic', 'anytls', 'wireguard', 'socks', 'http'].map((p) => field(p === 'shadowsocks' ? 'Shadowsocks' : p.toUpperCase(),
-              select([{ value: '', label: t('auto') }, { value: 'xray', label: 'Xray' }, { value: 'sing-box', label: 'sing-box' }, { value: 'mihomo', label: S.mihomo ? 'mihomo' : `mihomo (${t('upd_notInstalled')})` }], (st.coreFor || {})[p] || '', (val) => {
+              select([{ value: '', label: t('auto') }, { value: 'xray', label: 'Xray' }, { value: 'sing-box', label: 'sing-box' }, { value: 'mihomo', label: S.mihomo ? 'mihomo' : `mihomo (${t(S.mihomoUserOnly ? 'mihomo_userOnly' : 'upd_notInstalled')})` }], (st.coreFor || {})[p] || '', (val) => {
                 const next = { ...(st.coreFor || {}) };
                 if (val) next[p] = val; else delete next[p];
                 set({ coreFor: next });
