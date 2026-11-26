@@ -11,6 +11,8 @@ import { logLine } from './logs.js';
 import { profileName } from './routing.js';
 
 // --------------------------------------------------------------------------- connection card
+const CORE_LABEL = { xray: 'Xray', 'sing-box': 'sing-box', mihomo: 'mihomo' };
+
 function connectionCard() {
   const active = S.servers.find((s) => s.id === S.activeId);
   const running = Boolean(S.core.running);
@@ -23,10 +25,9 @@ function connectionCard() {
   if (ui.busy) statusText = t('connecting');
   else if (!active) statusText = t('st_noServer');
   else if (!running) { statusText = t('st_stopped'); statusCls = 'warn'; }
-  else if (st.tun) { statusText = t('st_tun'); statusCls = 'on'; }
-  else if (st.proxyMode === 'on') { statusText = t('st_proxyOn'); statusCls = 'on'; }
-  else if (st.proxyMode === 'pac') { statusText = t('st_pac'); statusCls = 'on'; }
-  else statusText = t('st_ready', { socks: st.socksPort, http: st.httpPort });
+  // Only the state: the mode (system proxy, TUN) shows in the controls below, explained under them.
+  else if (engaged) { statusText = t('connected'); statusCls = 'on'; }
+  else statusText = t('st_readyShort');
   // With TUN on every program goes through the tunnel: the proxy mode note would mislead then.
   const help = st.tun ? t('proxyHelp_tun') : t(`proxyHelp_${st.proxyMode}`, { socks: `127.0.0.1:${st.socksPort}`, http: `127.0.0.1:${st.httpPort}` });
   // Start when the core is off; Disconnect stops it completely (proxy port, TUN, system proxy set by Best).
@@ -41,7 +42,7 @@ function connectionCard() {
     h('span', { class: 'chip' }, transportText(active)),
     active.address ? h('span', { class: 'chip' }, h('bdi', { dir: 'ltr', class: 'ltr mono' }, ui.hideAddr ? maskAddress(active.address) : active.address, active.port ? `:${active.port}` : '')) : null,
     active.subId ? h('span', { class: 'chip' }, (S.subs.find((x) => x.id === active.subId) || {}).name || '') : null,
-    active.core || S.core.core ? h('span', { class: 'chip' }, (S.core.running && S.core.serverId === active.id ? S.core.core : active.core) === 'xray' ? 'Xray' : 'sing-box') : null,
+    active.core || S.core.core ? h('span', { class: 'chip' }, CORE_LABEL[S.core.running && S.core.serverId === active.id ? S.core.core : active.core] || 'sing-box') : null,
   ] : [];
 
   const tunCtl = h('div', { class: 'ctl' },

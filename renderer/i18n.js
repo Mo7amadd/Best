@@ -29,9 +29,9 @@ const fa = {
   core: 'هسته', localPorts: 'پورت محلی', lanSharing: 'اشتراک در شبکه', privileges: 'دسترسی', admin: 'مدیر', normalUser: 'عادی',
   on: 'روشن', off: 'خاموش',
 
-  st_noServer: 'سروری انتخاب نشده — روی یک سرور دابل‌کلیک کنید', st_stopped: 'هسته اجرا نشده', st_start: 'اجرا',
-  st_ready: 'آماده — پروکسی سیستم خاموش است (فقط برنامه‌هایی که روی پورت {socks} یا {http} تنظیم شده‌اند)',
-  st_proxyOn: 'متصل — پروکسی سیستم روشن است', st_pac: 'متصل — پروکسی سیستم با PAC', st_tun: 'متصل — حالت TUN (همه‌ی ترافیک سیستم)',
+  st_noServer: 'سروری انتخاب نشده — روی یک سرور دابل‌کلیک کنید', st_stopped: 'هسته اجرا نشده', st_readyShort: 'آماده', st_start: 'اجرا',
+  
+  
   connected: 'متصل', connecting: 'در حال اتصال…', disconnected: 'قطع — ترافیک مستقیم می‌رود',
   connect: 'اتصال', disconnect: 'قطع اتصال', noServerSelected: 'سروری انتخاب نشده',
   systemProxy: 'پروکسی سیستم', proxy_off: 'خاموش', proxy_on: 'روشن', proxy_pac: 'PAC', proxy_keep: 'دست نزن',
@@ -203,9 +203,9 @@ const en = {
   upd_security: 'Files only come from the official GitHub repositories and each one must match its published SHA-256 hash, otherwise it is not installed. A new core is run once and checked before it replaces the old one.',
   core: 'Core', localPorts: 'Local ports', lanSharing: 'LAN sharing', privileges: 'Privileges', admin: 'Admin', normalUser: 'Standard',
   on: 'On', off: 'Off',
-  st_noServer: 'No server selected — double-click a server', st_stopped: 'Core is not running', st_start: 'Start',
-  st_ready: 'Ready — system proxy is off (only apps set to port {socks} or {http})',
-  st_proxyOn: 'Connected — system proxy is on', st_pac: 'Connected — system proxy with PAC', st_tun: 'Connected — TUN mode (all system traffic)',
+  st_noServer: 'No server selected — double-click a server', st_stopped: 'Core is not running', st_readyShort: 'Ready', st_start: 'Start',
+  
+  
   connected: 'Connected', connecting: 'Connecting…', disconnected: 'Not connected — traffic goes direct',
   connect: 'Connect', disconnect: 'Disconnect', noServerSelected: 'No server selected',
   systemProxy: 'System proxy', proxy_off: 'Off', proxy_on: 'On', proxy_pac: 'PAC', proxy_keep: 'Unchanged',
@@ -369,9 +369,9 @@ const ru = {
   upd_security: 'Файлы загружаются только из официальных репозиториев GitHub, и каждый должен совпадать с опубликованным хешем SHA-256, иначе он не устанавливается. Новое ядро сначала запускается для проверки и только потом заменяет старое.',
   core: 'Ядро', localPorts: 'Порты', lanSharing: 'Доступ из LAN', privileges: 'Права', admin: 'Администратор', normalUser: 'Обычный',
   on: 'Вкл.', off: 'Выкл.',
-  st_noServer: 'Сервер не выбран — дважды щёлкните по серверу', st_stopped: 'Ядро не запущено', st_start: 'Запустить',
-  st_ready: 'Готово — системный прокси выключен (только для приложений, настроенных на порт {socks} или {http})',
-  st_proxyOn: 'Подключено — системный прокси включён', st_pac: 'Подключено — системный прокси с PAC', st_tun: 'Подключено — режим TUN (весь трафик системы)',
+  st_noServer: 'Сервер не выбран — дважды щёлкните по серверу', st_stopped: 'Ядро не запущено', st_readyShort: 'Готово', st_start: 'Запустить',
+  
+  
   connected: 'Подключено', connecting: 'Подключение…', disconnected: 'Не подключено — трафик идёт напрямую',
   connect: 'Подключить', disconnect: 'Отключить', noServerSelected: 'Сервер не выбран',
   systemProxy: 'Системный прокси', proxy_off: 'Выкл.', proxy_on: 'Вкл.', proxy_pac: 'PAC', proxy_keep: 'Не менять',
@@ -587,12 +587,12 @@ const zh = {
   on: '开',
   off: '关',
   st_noServer: '未选择服务器 — 双击一个服务器',
-  st_stopped: '核心未运行',
+  st_stopped: '核心未运行', st_readyShort: '就绪',
   st_start: '启动',
-  st_ready: '就绪 — 系统代理已关闭（仅限设置为端口 {socks} 或 {http} 的应用）',
-  st_proxyOn: '已连接 — 系统代理已开启',
-  st_pac: '已连接 — 系统代理（PAC）',
-  st_tun: '已连接 — TUN 模式（全部系统流量）',
+  
+  
+  
+  
   connected: '已连接',
   connecting: '正在连接…',
   disconnected: '未连接 — 流量直接访问',
