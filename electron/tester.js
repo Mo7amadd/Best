@@ -6,14 +6,31 @@ const tls = require('tls');
 const http = require('http');
 const dgram = require('dgram');
 
-function tcping(host, port, timeout = 3000) {
+/**
+ * Why a test failed, short and readable, for the log (error codes and messages of Node and the
+ * proxy). `why` is an optional object whose `reason` is set when a test returns -1.
+ */
+function reasonOf(e) {
+  const code = e && e.code ? String(e.code) : '';
+  const known = {
+    ECONNREFUSED: 'connection refused', ECONNRESET: 'connection reset', ETIMEDOUT: 'timeout', EPIPE: 'connection closed',
+    ENOTFOUND: 'name not found', EAI_AGAIN: 'name not found', EHOSTUNREACH: 'host unreachable', ENETUNREACH: 'network unreachable',
+  };
+  if (known[code]) return known[code];
+  if (/^(ERR_TLS|CERT_|UNABLE_TO|DEPTH_ZERO|SELF_SIGNED|ERR_SSL)/.test(code)) return `TLS: ${code}`;
+  const msg = String((e && e.message) || e || 'failed').split('\n')[0];
+  return (code && !msg.includes(code) ? `${msg} (${code})` : msg).slice(0, 120);
+}
+const fail = (why, reason) => { if (why) why.reason = reason; return -1; };
+
+function tcping(host, port, timeout = 3000, why = null) {
   return new Promise((resolve) => {
     const start = process.hrtime.bigint();
     const sock = net.connect({ host, port, timeout });
     const done = (ms) => { sock.destroy(); resolve(ms); };
     sock.once('connect', () => done(Number((process.hrtime.bigint() - start) / 1000000n)));
-    sock.once('timeout', () => done(-1));
-    sock.once('error', () => done(-1));
+    sock.once('timeout', () => done(fail(why, 'timeout')));
+    sock.once('error', (e) => done(fail(why, reasonOf(e))));
   });
 }
 
@@ -83,23 +100,24 @@ function getViaProxy(port, url, { timeout = 6000, maxBytes = 0, maxSeconds = 0, 
   });
 }
 
-async function realDelay(port, url, timeout) {
+async function realDelay(port, url, timeout, why = null) {
   try {
     const r = await getViaProxy(port, url, { timeout });
-    return r.status >= 200 && r.status < 400 ? r.ms : -1;
-  } catch {
-    return -1;
+    return r.status >= 200 && r.status < 400 ? r.ms : fail(why, `HTTP ${r.status}`);
+  } catch (e) {
+    return fail(why, reasonOf(e));
   }
 }
 
 /** Download for up to `seconds` and return MB/s (decimal megabytes), or -1 on failure. */
-async function speedTest(port, url, seconds = 8, onProgress = null) {
+async function speedTest(port, url, seconds = 8, onProgress = null, why = null) {
   try {
     const r = await getViaProxy(port, url, { timeout: 8000, maxSeconds: seconds, maxBytes: 200 * 1024 * 1024, onProgress });
-    if (!r.bytes || r.seconds <= 0) return -1;
+    if (r.status < 200 || r.status >= 400) return fail(why, `HTTP ${r.status}`);
+    if (!r.bytes || r.seconds <= 0) return fail(why, 'no data received');
     return Math.round((r.bytes / r.seconds / 1e6) * 100) / 100;
-  } catch {
-    return -1;
+  } catch (e) {
+    return fail(why, reasonOf(e));
   }
 }
 
@@ -108,7 +126,7 @@ async function speedTest(port, url, seconds = 8, onProgress = null) {
  * (UDP ASSOCIATE) and return the milliseconds until the first answer, or -1. Tells whether the
  * server carries UDP at all (calls, games, QUIC) and how fast.
  */
-function udpDelay(port, target = 'pool.ntp.org:123', timeout = 6000) {
+function udpDelay(port, target = 'pool.ntp.org:123', timeout = 6000, why = null) {
   const m = /^\[?([^\]]+?)\]?:(\d{1,5})$/.exec(String(target).trim());
   const host = m ? m[1] : 'pool.ntp.org';
   const dport = m ? Number(m[2]) : 123;
@@ -120,33 +138,34 @@ function udpDelay(port, target = 'pool.ntp.org:123', timeout = 6000) {
     let stage = 0;
     let buf = Buffer.alloc(0);
     const tcp = net.connect({ host: '127.0.0.1', port });
-    const done = (v) => {
+    const done = (v, reason = '') => {
       if (settled) return;
       settled = true;
+      if (v < 0 && why) why.reason = reason || 'failed';
       clearTimeout(timer); clearInterval(resend);
       tcp.destroy();
       if (udp) { try { udp.close(); } catch { /* closed */ } }
       resolve(v);
     };
-    const timer = setTimeout(() => done(-1), timeout);
-    tcp.on('error', () => done(-1));
-    tcp.on('close', () => done(-1)); // the UDP association lives as long as this connection
+    const timer = setTimeout(() => done(-1, stage === 2 ? 'no UDP answer' : 'timeout'), timeout);
+    tcp.on('error', (e) => done(-1, reasonOf(e)));
+    tcp.on('close', () => done(-1, 'proxy closed the connection')); // the UDP association lives as long as this connection
     tcp.on('connect', () => tcp.write(Buffer.from([5, 1, 0]))); // SOCKS5, no authentication
     tcp.on('data', (d) => {
       buf = Buffer.concat([buf, d]);
       if (stage === 0) {
         if (buf.length < 2) return;
-        if (buf[0] !== 5 || buf[1] !== 0) { done(-1); return; }
+        if (buf[0] !== 5 || buf[1] !== 0) { done(-1, 'SOCKS refused'); return; }
         buf = buf.subarray(2);
         stage = 1;
         tcp.write(Buffer.from([5, 3, 0, 1, 0, 0, 0, 0, 0, 0])); // UDP ASSOCIATE
       }
       if (stage === 1) {
         if (buf.length < 4) return;
-        if (buf[1] !== 0) { done(-1); return; }
+        if (buf[1] !== 0) { done(-1, 'UDP not allowed by the proxy'); return; }
         const atyp = buf[3];
         const alen = atyp === 1 ? 4 : atyp === 4 ? 16 : atyp === 3 ? 1 + (buf[4] || 0) : -1;
-        if (alen < 0) { done(-1); return; }
+        if (alen < 0) { done(-1, 'bad SOCKS answer'); return; }
         if (buf.length < 4 + alen + 2) return;
         let relay = '127.0.0.1';
         if (atyp === 1) relay = Array.from(buf.subarray(4, 8)).join('.');
@@ -158,7 +177,7 @@ function udpDelay(port, target = 'pool.ntp.org:123', timeout = 6000) {
         const ntp = Buffer.alloc(48); ntp[0] = 0x1b; // NTP v3 client request
         const packet = Buffer.concat([Buffer.from([0, 0, 0, 3, name.length]), name, Buffer.from([dport >> 8, dport & 255]), ntp]);
         udp = dgram.createSocket(relay.includes(':') ? 'udp6' : 'udp4');
-        udp.on('error', () => done(-1));
+        udp.on('error', (e) => done(-1, reasonOf(e)));
         udp.on('message', (msg) => { if (msg.length > 10) done(Math.round(Number(process.hrtime.bigint() - start) / 1e6)); });
         start = process.hrtime.bigint();
         const fire = () => udp.send(packet, relayPort, relay, () => {});
@@ -180,4 +199,4 @@ async function pool(items, concurrency, fn, isCancelled) {
   await Promise.all(workers);
 }
 
-module.exports = { tcping, realDelay, speedTest, udpDelay, getViaProxy, pool };
+module.exports = { tcping, realDelay, speedTest, udpDelay, getViaProxy, pool, reasonOf };

@@ -779,17 +779,38 @@ async function runTests(ids, kind) {
   const socks = kind === 'udp'; // UDP needs SOCKS inbounds (UDP ASSOCIATE)
   for (const s of list) delete s[field];
   send('test', { kind, running: true, ids: list.map((s) => s.id) });
-  const report = (s, value) => { s[field] = value; send('test-result', { id: s.id, field, value }); };
+  // The log: what is tested and how, each server's result (with the reason of a failure) and a summary.
+  const KIND_NAME = { tcping: 'TCP ping', real: 'real delay', speed: 'speed', udp: 'UDP' };
+  const target = kind === 'tcping' ? 'the server address' : kind === 'speed' ? settings.speedTestUrl : kind === 'udp' ? settings.udpTestTarget : settings.testUrl;
+  const t0 = Date.now();
+  const why = new Map(); // server id → reason of its failure
+  const coreName = (s) => (s.protocol === 'custom' ? `${s.core || 'xray'}, full config` : coreOf(s));
+  const nameOf = (s) => `${(s.remark || s.address || s.protocol).slice(0, 60)} (${s.protocol}, ${coreName(s)})`;
+  const unit = (v) => (kind === 'speed' ? `${v} MB/s` : `${v} ms`);
+  cores.log('app', `test ${KIND_NAME[kind] || kind}: ${list.length} server(s) — ${target}${kind === 'speed' ? ', 8 s each, one at a time' : `, timeout ${settings.testTimeout} ms`}${kind === 'real' || kind === 'udp' ? `, ${settings.testConcurrency} at a time` : ''}`);
+  const report = (s, value, reason = '') => {
+    s[field] = value;
+    send('test-result', { id: s.id, field, value });
+    if (value >= 0) cores.log('app', `test ${nameOf(s)}: ${unit(value)}`);
+    else {
+      const r = reason || why.get(s.id) || 'failed';
+      why.set(s.id, r);
+      cores.log('app', `[Warning] test ${nameOf(s)}: failed — ${r}`);
+    }
+  };
   const started = (s) => send('test-start', { id: s.id, kind });
   const progress = (s) => (bytes, secs) => { if (secs > 0) send('test-progress', { id: s.id, field: 'speed', value: Math.round((bytes / secs / 1e6) * 100) / 100 }); };
-  const delayOf = async (s, port) => { started(s); return tester.realDelay(port, settings.testUrl, settings.testTimeout); };
-  const speedOf = async (s, port) => { started(s); return tester.speedTest(port, settings.speedTestUrl, 8, progress(s)); };
-  const udpOf = async (s, port) => { started(s); return tester.udpDelay(port, settings.udpTestTarget, settings.testTimeout); };
+  // Each measure notes why it failed (tester's `why`), for report() above.
+  const noted = (s) => { const w = { reason: '' }; return [w, (v) => { if (v < 0 && w.reason) why.set(s.id, w.reason); return v; }]; };
+  const delayOf = async (s, port) => { started(s); const [w, done] = noted(s); return done(await tester.realDelay(port, settings.testUrl, settings.testTimeout, w)); };
+  const speedOf = async (s, port) => { started(s); const [w, done] = noted(s); return done(await tester.speedTest(port, settings.speedTestUrl, 8, progress(s), w)); };
+  const udpOf = async (s, port) => { started(s); const [w, done] = noted(s); return done(await tester.udpDelay(port, settings.udpTestTarget, settings.testTimeout, w)); };
+  const pingOf = async (s) => { const [w, done] = noted(s); return s.address && s.port ? done(await tester.tcping(s.address, s.port, settings.testTimeout, w)) : (why.set(s.id, 'no address'), -1); };
   const measure = (s, port) => (kind === 'speed' ? speedOf(s, port) : kind === 'udp' ? udpOf(s, port) : delayOf(s, port));
 
   try {
     if (kind === 'tcping') {
-      await tester.pool(list, 16, async (s) => { started(s); report(s, s.address && s.port ? await tester.tcping(s.address, s.port, settings.testTimeout) : -1); }, () => run.cancelled);
+      await tester.pool(list, 16, async (s) => { started(s); report(s, await pingOf(s)); }, () => run.cancelled);
     } else {
       const groups = { xray: [], 'sing-box': [], mihomo: [] };
       const customs = [];
@@ -797,21 +818,22 @@ async function runTests(ids, kind) {
         if (s.protocol === 'custom') { customs.push(s); continue; }
         // A server whose config cannot be built (e.g. a bad Shadowsocks 2022 key) would stop the
         // whole batch core from starting: fail it on its own and keep it out of the batch.
-        try { checkSs2022Key(s); } catch { report(s, -1); continue; }
+        try { checkSs2022Key(s); } catch (e) { report(s, -1, `config: ${cleanText(e.message, 120)}`); continue; }
         groups[coreOf(s)].push(s);
       }
       // Full JSON configs (custom / JSON subscriptions): each runs in its own test core with a
       // single local HTTP inbound. sing-box configs fall back to a TCP ping of their server.
       await tester.pool(customs, 4, async (s) => {
         if (s.core !== 'xray') {
-          if (kind === 'udp') return; // not measurable for full sing-box configs
-          started(s); report(s, s.address && s.port ? await tester.tcping(s.address, s.port, settings.testTimeout) : -1); return;
+          if (kind === 'udp') { cores.log('app', `test ${nameOf(s)}: skipped — UDP cannot be measured for a full sing-box config`); return; }
+          cores.log('app', `test ${nameOf(s)}: a full sing-box config is measured with a TCP ping of its server`);
+          started(s); report(s, await pingOf(s)); return;
         }
         try {
           const port = await freeBasePort(1);
           const h = await cores.startRawTest(xrayTestConfig(JSON.parse(s.config), port, { socks }), 'xray', port);
           try { report(s, await measure(s, port)); } finally { await h.stop(); }
-        } catch { report(s, -1); }
+        } catch (e) { report(s, -1, `test core: ${cleanText(e.message, 160)}`); }
       }, () => run.cancelled);
       for (const kindCore of ['xray', 'sing-box', 'mihomo']) {
         const all = groups[kindCore];
@@ -822,7 +844,7 @@ async function runTests(ids, kind) {
             const base = await freeBasePort(chunk.length * 2);
             handle = await cores.startTestCore(chunk.map(withDefaults), settings, kindCore, base, { socks });
           } catch (e) {
-            cores.log('app', `test core failed: ${e.message}`);
+            cores.log('app', `[Warning] test core (${kindCore}, ${chunk.length} servers) did not start: ${cleanText(e.message, 300)}; testing them one by one`);
             // One bad server can break the whole batch: fall back to testing one by one.
             for (const s of chunk) {
               if (run.cancelled) break;
@@ -832,7 +854,7 @@ async function runTests(ids, kind) {
                 const v = await measure(s, h.ports[0]);
                 await h.stop();
                 report(s, v);
-              } catch { report(s, -1); }
+              } catch (e2) { report(s, -1, `test core: ${cleanText(e2.message, 160)}`); }
             }
             continue;
           }
@@ -850,6 +872,17 @@ async function runTests(ids, kind) {
       }
     }
   } finally {
+    // Summary: how many worked, the best and the middle result, the reasons of the failures.
+    const done = list.filter((s) => typeof s[field] === 'number');
+    const ok = done.filter((s) => s[field] >= 0).sort((a, b) => (kind === 'speed' ? b[field] - a[field] : a[field] - b[field]));
+    const failed = done.length - ok.length;
+    const reasons = {};
+    for (const s of done) if (s[field] < 0) { const r = why.get(s.id) || 'failed'; reasons[r] = (reasons[r] || 0) + 1; }
+    const top = Object.entries(reasons).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([r, n]) => `${r} ×${n}`).join(', ');
+    cores.log('app', `test ${KIND_NAME[kind] || kind} ${run.cancelled ? 'stopped' : 'finished'} in ${((Date.now() - t0) / 1000).toFixed(1)} s: ${ok.length} working, ${failed} failed` +
+      `${list.length - done.length ? `, ${list.length - done.length} not tested` : ''}` +
+      `${ok.length ? `; best ${unit(ok[0][field])} (${(ok[0].remark || ok[0].address || '').slice(0, 60)}), middle ${unit(ok[Math.floor((ok.length - 1) / 2)][field])}` : ''}` +
+      `${top ? `; failures: ${top}` : ''}`);
     if (testRun === run) testRun = null;
     saveServers();
     send('test', { kind, running: false });
@@ -1001,10 +1034,20 @@ async function updateSub(sub) {
   // While traffic goes through Best, a failed fetch through the tunnel never falls back to a direct
   // request: that would show the panel address (and an http:// token) to the local network.
   const order = settings.subViaProxy && tryProxy ? (isEngaged() ? [true] : [true, false]) : tryProxy ? [false, true] : [false];
-  const fetchWith = async (userAgent, url = sub.url) => {
+  // The log names the subscription, never its link (the link is the user's key to the panel).
+  const tag = `subscription ${cleanText(sub.name, 60)}`;
+  const t0 = Date.now();
+  const fetchWith = async (userAgent, url = sub.url, what = 'link') => {
     let lastErr;
-    for (const viaProxy of order) {
-      try { return await fetchText(url, { userAgent, viaProxy }); } catch (e) { lastErr = e; }
+    for (const [i, viaProxy] of order.entries()) {
+      try {
+        const r = await fetchText(url, { userAgent, viaProxy });
+        cores.log('app', `${tag}: ${what} downloaded through ${viaProxy ? 'the tunnel' : 'a direct connection'} as "${cleanText(userAgent, 40)}" (${Math.max(1, Math.round(Buffer.byteLength(r.text) / 1024))} KB)`);
+        return r;
+      } catch (e) {
+        lastErr = e;
+        cores.log('app', `[Warning] ${tag}: ${what} through ${viaProxy ? 'the tunnel' : 'a direct connection'} failed (${cleanText(e && e.message, 120)})${i < order.length - 1 ? '; trying the other way' : ''}`);
+      }
     }
     throw lastErr;
   };
@@ -1018,6 +1061,7 @@ async function updateSub(sub) {
     result = await fetchWith(sub.userAgent || settings.subUserAgent || (sub.compatUa ? COMPAT_UA : BEST_UA));
     parsed = parseContent(result.text, { subId: sub.id });
     if (autoUa && !sub.compatUa && !parsed.servers.length) {
+      cores.log('app', `${tag}: no servers for the name "${BEST_UA}"; asking again with "${COMPAT_UA}"`);
       const again = await fetchWith(COMPAT_UA).catch(() => null);
       const reparsed = again && parseContent(again.text, { subId: sub.id });
       if (reparsed && reparsed.servers.length) { result = again; parsed = reparsed; sub.compatUa = true; }
@@ -1025,7 +1069,7 @@ async function updateSub(sub) {
     // Extra links of the same subscription (same client name); their servers are added to the list.
     for (const extra of sub.moreUrls || []) {
       try {
-        const more = await fetchWith(sub.userAgent || settings.subUserAgent || (sub.compatUa ? COMPAT_UA : BEST_UA), extra);
+        const more = await fetchWith(sub.userAgent || settings.subUserAgent || (sub.compatUa ? COMPAT_UA : BEST_UA), extra, 'extra link');
         const p = parseContent(more.text, { subId: sub.id });
         parsed = { ...parsed, servers: [...parsed.servers, ...p.servers], errors: [...parsed.errors, ...p.errors] };
       } catch (e) {
@@ -1035,6 +1079,7 @@ async function updateSub(sub) {
   } catch (e) {
     sub.error = cleanText(e && e.message, 200);
     saveSubs();
+    cores.log('app', `[Warning] ${tag}: update failed — ${sub.error}`);
     throw e;
   }
   const split = splitInfoNodes(parsed.servers);
@@ -1052,7 +1097,12 @@ async function updateSub(sub) {
     seen.add(k);
     return true;
   });
+  cores.log('app', `${tag}: ${split.servers.length} server(s)` +
+    `${info.length ? `, ${info.length} info line(s) (${cleanText(info.slice(0, 2).join(' · '), 120)})` : ''}` +
+    `${parsed.errors.length ? `, ${parsed.errors.length} link(s) not readable (${cleanText(String(parsed.errors[0] && (parsed.errors[0].error || parsed.errors[0].message || parsed.errors[0])), 100)})` : ''}` +
+    `${split.servers.length - real.length ? `, ${split.servers.length - real.length} left out by the name filters or as duplicates` : ''}`);
   if (split.servers.length && !real.length && (keep || drop)) {
+    cores.log('app', `[Warning] ${tag}: the name filters left no server; the old list stays`);
     sub.error = 'FILTER_EMPTY';
     saveSubs();
     throw new Error('FILTER_EMPTY');
@@ -1068,6 +1118,7 @@ async function updateSub(sub) {
   // Expired / out of data: panels such as 3x-ui then return only info entries. Keep the old
   // servers (so nothing silently disappears) and show the panel's message instead.
   if (outcome === 'notice') {
+    cores.log('app', `[Warning] ${tag}: the panel sent only a message (expired or out of data?); the old servers stay`);
     sub.notice = info.slice(0, 3).join(' · ');
     sub.infoNodes = info.slice(0, 10);
     sub.lastUpdate = Date.now();
@@ -1081,6 +1132,7 @@ async function updateSub(sub) {
     // servers stay and the reason is shown.
     sub.error = outcome;
     saveSubs();
+    cores.log('app', `[Warning] ${tag}: nothing usable (${outcome}); the old servers stay`);
     throw new Error(sub.error);
   }
   // Pre-resolving (an option of the subscription): names become the IPs the chosen resolver gives.
@@ -1109,6 +1161,14 @@ async function updateSub(sub) {
   if (activeId && !servers.some((s) => s.id === activeId)) activeId = '';
   const ui = parseUserInfo(result.userInfo);
   sub.info = { upload: ui.upload || 0, download: ui.download || 0, total: ui.total || 0, expire: ui.expire || 0 };
+  {
+    const added = fresh.filter((x) => !old.has(serverKey(x))).length;
+    const gb = (n) => `${(n / 1073741824).toFixed(2)} GB`;
+    const used = (sub.info.upload || 0) + (sub.info.download || 0);
+    cores.log('app', `${tag}: updated in ${((Date.now() - t0) / 1000).toFixed(1)} s — ${fresh.length} server(s): ${added} new, ${fresh.length - added} kept, ${old.size - (fresh.length - added)} removed` +
+      `${sub.info.total || used ? `; used ${gb(used)}${sub.info.total ? ` of ${gb(sub.info.total)}` : ''}` : ''}` +
+      `${sub.info.expire ? `; expires ${new Date(sub.info.expire * 1000).toISOString().slice(0, 10)}` : ''}`);
+  }
   sub.infoNodes = info.slice(0, 10);
   sub.lastUpdate = Date.now();
   sub.error = '';
@@ -1117,13 +1177,15 @@ async function updateSub(sub) {
   return { count: fresh.length, errors: parsed.errors.length };
 }
 
-async function updateSubs(ids) {
+async function updateSubs(ids, why = '') {
   const list = subs.filter((s) => (ids ? ids.includes(s.id) : s.enabled));
   const results = [];
+  if (list.length > 1 || why) cores.log('app', `updating ${list.length} subscription(s)${why ? ` (${why})` : ''}`);
   for (const sub of list) {
     try { results.push({ id: sub.id, ok: true, ...(await updateSub(sub)) }); } catch (e) { results.push({ id: sub.id, ok: false, error: cleanText(e.message, 200) }); }
     broadcast();
   }
+  if (list.length > 1) { const bad = results.filter((r) => !r.ok).length; cores.log('app', `subscriptions updated: ${results.length - bad} done${bad ? `, ${bad} failed` : ''}`); }
   return results;
 }
 
@@ -1135,7 +1197,7 @@ function scheduleSubUpdates() {
       const hours = s.autoUpdateHours || settings.subAutoUpdateHours || s.panelInterval;
       return s.enabled && hours > 0 && now - s.lastUpdate > hours * 3600 * 1000;
     });
-    if (due.length) updateSubs(due.map((s) => s.id)).catch(() => {});
+    if (due.length) updateSubs(due.map((s) => s.id), 'automatic, on schedule').catch(() => {});
   }, 10 * 60 * 1000);
 }
 
