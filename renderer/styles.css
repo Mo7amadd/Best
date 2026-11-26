@@ -577,6 +577,7 @@ html[dir="rtl"] .test-progress { padding: 8px 14px 8px 8px; }
 .upd-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 .upd-ok { display: inline-flex; align-items: center; gap: 6px; color: var(--good); font-size: 13px; }
 .upd-err { display: inline-flex; align-items: center; gap: 6px; color: var(--bad); font-size: 13px; }
+.upd-checking { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }
 .upd-progress { display: flex; align-items: center; gap: 8px; }
 .upd-progress .tp-bar { min-width: 80px; }
 .upd-app { opacity: .7; }

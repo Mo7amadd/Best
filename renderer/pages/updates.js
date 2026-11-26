@@ -41,6 +41,7 @@ function statusOf(item, id) {
     if (id === 'mihomo' && S.mihomoUserOnly) return h('span', { class: 'upd-err', title: t('upd_mihomoUserOnly') }, icon('alert', 14), t('mihomo_userOnly'));
     return h('span', { class: 'dim' }, t('upd_notInstalled'));
   }
+  if (item.checking && !item.busy) return h('span', { class: 'upd-checking dim' }, h('span', { class: 'spinner' }), t('upd_checking'));
   if (item.busy) {
     return h('div', { class: 'upd-progress', 'data-progress': id || '' },
       h('span', { class: 'spinner' }),
@@ -145,8 +146,9 @@ function appStatus() {
 
 export function renderUpdates() {
   const st = S.updates || { checking: false, checkedAt: 0, items: {} };
-  if (!ui.updatesAutoChecked && !st.checking) {
-    // Opening the page always refreshes the status.
+  const downloading = Object.values(st.items || {}).some((x) => x.busy) || Boolean(S.appUpdate && S.appUpdate.busy);
+  if (!ui.updatesAutoChecked && !st.checking && !downloading) {
+    // Opening the page always refreshes the status (not while something downloads: that is enough work).
     ui.updatesAutoChecked = true;
     api.checkUpdates().catch(() => {});
   }

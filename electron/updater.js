@@ -210,6 +210,9 @@ function extInstalled(id) {
   return Boolean(c && c.kind === 'ext' && c.files.every(([, t]) => fs.existsSync(path.join(userGeoDir(), t))));
 }
 
+/** Core file (path and change time) → its version: see currentVersion. */
+const versionCache = new Map();
+
 function sha256File(file) {
   return new Promise((resolve, reject) => {
     const h = crypto.createHash('sha256');
@@ -305,7 +308,27 @@ class Updater extends EventEmitter {
 
   /** `maxBytes` / `timeoutMs`: limits for one download (Best's own update is larger than a core). */
   /** `head`: only follow the redirects and return the final address (no body). */
-  async fetch(url, { binary = false, head = false, onProgress, maxBytes = MAX_DOWNLOAD, timeoutMs = 600000, signal = null } = {}) {
+  async fetch(url, opts = {}) {
+    if (!opts.binary) return this.fetchOnce(url, opts);
+    // A download that breaks half-way (the tunnel was switched to another server, connected or
+    // disconnected while it ran) starts again with the routes of that moment, up to twice.
+    for (let round = 0; ; round++) {
+      const port = this.getProxyPort();
+      const seen = { bytes: 0 };
+      try {
+        return await this.fetchOnce(url, { ...opts, seen });
+      } catch (e) {
+        const msg = String(e.message || e);
+        const again = round < 2 && msg !== 'CANCELLED' && !/too large|^HTTP 4/.test(msg) && (seen.bytes > 0 || this.getProxyPort() !== port);
+        if (!again) throw e;
+        if (this.log) this.log(`download of ${url.split('/').pop()} interrupted (${msg.slice(0, 120)}); starting it again`);
+        await new Promise((r) => setTimeout(r, 1500));
+        if (opts.signal && opts.signal.aborted) throw new Error('CANCELLED');
+      }
+    }
+  }
+
+  async fetchOnce(url, { binary = false, head = false, onProgress, maxBytes = MAX_DOWNLOAD, timeoutMs = 600000, signal = null, seen = null } = {}) {
     const attempts = this.routes();
     let lastErr;
     for (const rules of attempts) {
@@ -331,6 +354,7 @@ class Updater extends EventEmitter {
           const { done, value } = await reader.read();
           if (done) break;
           size += value.length;
+          if (seen) seen.bytes = size;
           if (signal && signal.aborted) { reader.cancel().catch(() => {}); throw new Error('CANCELLED'); }
           if (size > maxBytes) { reader.cancel(); throw new Error('file too large'); }
           chunks.push(Buffer.from(value));
@@ -430,8 +454,16 @@ class Updater extends EventEmitter {
     const c = COMPONENTS[id];
     if (c.kind === 'core') {
       if (id === 'mihomo' && !mihomoInstalled()) return '';
-      const out = await run(coreExe(coreOfId(id)), [id === 'mihomo' ? '-v' : 'version']).catch(() => '');
-      return (id === 'xray' ? /Xray ([\d.]+)/ : id === 'mihomo' ? /v(\d+\.\d+\.\d+)/ : /version ([\d.]+)/).exec(out)?.[1] || '';
+      // Starting a program blocks Best for a moment on Windows: the version of the same file (path
+      // and time) is asked only once.
+      const exe = coreExe(coreOfId(id));
+      let key = '';
+      try { key = `${exe}|${fs.statSync(exe).mtimeMs}`; } catch { /* asked below */ }
+      if (key && versionCache.has(key)) return versionCache.get(key);
+      const out = await run(exe, [id === 'mihomo' ? '-v' : 'version']).catch(() => '');
+      const v = (id === 'xray' ? /Xray ([\d.]+)/ : id === 'mihomo' ? /v(\d+\.\d+\.\d+)/ : /version ([\d.]+)/).exec(out)?.[1] || '';
+      if (key && v) versionCache.set(key, v);
+      return v;
     }
     return (this.meta[id] && this.meta[id].tag) || '';
   }
@@ -447,6 +479,7 @@ class Updater extends EventEmitter {
     const found = new Set();
     const one = async (id) => {
       const c = COMPONENTS[id];
+      this.set(id, { checking: true }); // its row shows that it is being checked right now
       try {
         // No API request here (see latestTag): checking costs nothing of GitHub's hourly limit.
         const tag = await this.latestTag(c.repo);
@@ -470,10 +503,10 @@ class Updater extends EventEmitter {
           const localHash = await sha256File(path.join(geoDir(), c.file)).catch(() => '');
           available = Boolean(digest) && digest !== localHash;
         }
-        this.set(id, { current: current || (c.kind === 'geo' ? 'bundled' : ''), latest: tag, available, error: '', custom: c.kind === 'ext' ? false : this.isCustom(id) });
+        this.set(id, { checking: false, current: current || (c.kind === 'geo' ? 'bundled' : ''), latest: tag, available, error: '', custom: c.kind === 'ext' ? false : this.isCustom(id) });
         if (available) found.add(id);
       } catch (e) {
-        this.set(id, { error: String(e.message || e).slice(0, 200) });
+        this.set(id, { checking: false, error: String(e.message || e).slice(0, 200) });
       }
     };
     let next = 0;
